@@ -1,0 +1,79 @@
+name: Backend and red-team checks
+on:
+  pull_request:
+    paths:
+      - "agent/**"
+      - "mcp_server/**"
+      - "tests/**"
+      - "redteam/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".python-version"
+      - "runtimes/**"
+      - "package.json"
+      - "package-lock.json"
+      - "eslint.config.mjs"
+      - ".github/workflows/redteam.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npm run lint:js
+      - run: npm run test:js
+
+  deterministic:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.13.7"
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run --locked ruff check .
+      - run: uv run --locked ruff format --check .
+      - run: uv run --locked python -m pytest tests redteam/tests/test_client.py -q
+      - run: uv lock --project redteam --check
+      - run: uv lock --project runtimes/gemma --check
+
+  framework-smoke:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      UV_PROJECT_ENVIRONMENT: ${{ github.workspace }}/.venv-redteam
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.13.7"
+          enable-cache: true
+      - run: uv sync --project redteam --locked
+      - run: .venv-redteam/Scripts/python.exe -m pytest redteam/tests -q
+      - run: .venv-redteam/Scripts/python.exe -m redteam.run --engine pyrit
+      - run: .venv-redteam/Scripts/python.exe -m redteam.run --engine garak
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: offline-redteam-smoke
+          path: redteam/results/*.json
+          retention-days: 7

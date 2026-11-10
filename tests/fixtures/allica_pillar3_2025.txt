@@ -1,0 +1,45 @@
+Scope of disclosures
+This report presents the consolidated Pillar 3 disclosures of Allica Bank Limited (the Group) for the year-ended 31 
+December 2025. Allica Bank Limited publishes these disclosures in accordance with the Capital Requirements 
+Regulation (“the CRR”) Article 433b. These disclosures are prepared in accordance with the disclosure requirements 
+set out in the Prudential Regulatory Authority’s (“PRA”) Rulebook. Allica Bank Limited is not a LREQ firm and is not 
+subject to additional leverage ratio disclosure requirements. The disclosures should be read in conjunction with our 
+Annual Report and Accounts for risk management and remuneration.
+31 December 2025 31 December 2024
+£'000 £'000
+Available own funds (amounts)
+1 Common Equity Tier 1 (CET1) capital 325,689 276,827
+2 Tier 1 capital 370,566 321,704
+3 Total capital 406,393 359,031
+Risk-weighted exposure amounts
+4 Total risk-weighted exposure amount 2,422,216 1,908,286
+Capital ratios (as a percentage of risk-weighted exposure amount)
+5 Common Equity Tier 1 ratio (%) 13.4 % 14.5 %
+6 Tier 1 ratio (%) 15.3 % 16.9 %
+7 Total capital ratio (%) 16.8 % 18.8 %
+Additional own funds requirements based on SREP (as a percentage of risk-weighted exposure amount)
+UK 7a Additional CET1 SREP requirements (%) 1.1 % 1.9 %
+UK 7b Additional AT1 SREP requirements (%) 0.4 % 0.6 %
+UK 7c Additional T2 SREP requirements (%) 0.5 % 0.9 %
+UK 7d Total SREP own funds requirements (%) 9.9 % 11.4 %
+Combined buffer requirement (as a percentage of risk-weighted exposure amount)
+8 Capital conservation buffer (%) 2.5 % 2.5 %
+9 Institution specific countercyclical capital buffer (%) 2.0 % 2.0 %
+11 Combined buffer requirement (%) 4.5 % 4.5 %
+UK 11a Overall capital requirements (%) 14.5 % 15.9 %
+12 CET1 available after meeting the total SREP own funds requirements (%) 7.8 % 8.1 %
+Leverage ratio
+13 Total exposure measure excluding claims on central banks 5,092,370 3,421,039
+14 Leverage ratio excluding claims on central banks (%) 7.3 % 9.4 %
+Liquidity Coverage Ratio 1
+15 Total high-quality liquid assets (HQLA) (Weighted value -average) 1,928,875 1,137,180
+UK 16a Cash outflows - Total weighted value 1,007,942 625,000
+UK 16b Cash inflows - Total weighted value 134,297 99,079
+16 Total net cash outflows (adjusted value) 873,645 525,922
+17 Liquidity coverage ratio (%) 220.8 % 216.2 %
+Net Stable Funding Ratio 2
+18 Total available stable funding 3,884,410 2,937,724
+19 Total required stable funding 2,799,038 2,195,700
+20 NSFR ratio (%) 138.8 % 133.8 %
+1. Liquidity coverage ratio is calculated based on a 12-month average.
+2. Net stable funding ratio is calculated based on 4-quarter average.

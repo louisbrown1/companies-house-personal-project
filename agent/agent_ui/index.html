@@ -1,0 +1,544 @@
+
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Underwriting workspace</title>
+  <style>
+:root{--ink:#163a3a;--muted:#617372;--line:#dae3df;--teal:#076d61;--paper:#fff;--bg:#f3f5f1}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 system-ui,-apple-system,Segoe UI,sans-serif}button,input,textarea{font:inherit}button{border:1px solid var(--line);background:#fff;color:var(--ink);padding:10px 16px;border-radius:9px;cursor:pointer;font-weight:600}button:hover:not(:disabled){background:#eaf2ee;border-color:#8baea3}button:disabled{opacity:.45;cursor:not-allowed}button:focus-visible,input:focus-visible,textarea:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid #dcab49;outline-offset:3px}button.primary{background:var(--teal);border-color:var(--teal);color:white}button.primary:hover:not(:disabled){background:#054e46}.topbar{border-bottom:1px solid var(--line);background:#fff;padding:18px max(24px,calc((100vw - 1320px)/2));display:flex;justify-content:space-between;align-items:center}.brand{display:flex;gap:12px;align-items:center;font-weight:750;letter-spacing:-.4px}.brandmark{background:var(--ink);color:#fff;border-radius:10px;padding:5px 12px;font-size:22px}.eyebrow{font-size:11px;font-weight:750;text-transform:uppercase;letter-spacing:1.6px;color:var(--teal)}.badge{border:1px solid var(--line);border-radius:99px;padding:5px 10px;font-size:12px;background:#f8faf7}.shell{max-width:1320px;margin:auto;padding:38px 24px}.hero{display:flex;justify-content:space-between;gap:20px;align-items:end;margin-bottom:28px}h1{font-size:36px;letter-spacing:-1.3px;line-height:1.15;margin:8px 0 12px}p{margin:8px 0;color:var(--muted)}.workspace{display:grid;grid-template-columns:350px minmax(0,1fr);gap:24px;align-items:start}.panel{background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:24px;box-shadow:0 3px 14px #173a3a04}.step{font-size:11px;text-transform:uppercase;letter-spacing:1.4px;color:var(--teal);font-weight:750}.panel h2{font-size:20px;letter-spacing:-.4px;margin:8px 0 14px}label.field{display:block;font-size:13px;font-weight:650;margin:18px 0 7px}input[type=text],textarea{width:100%;border:1px solid #becfca;border-radius:9px;padding:12px;background:#fcfdfa;color:var(--ink)}textarea{resize:vertical;min-height:90px}input[type=radio]{accent-color:var(--teal)}.full{width:100%;margin-top:12px}.small,.meta{font-size:12px;color:var(--muted)}.card{padding:13px;border:1px solid var(--line);border-radius:10px;margin:10px 0}.approved{background:#edf7f0;border-color:#91bea6}.toolbar{display:flex;gap:8px;flex-wrap:wrap}.report-head{display:flex;justify-content:space-between;align-items:start;gap:15px;padding-bottom:18px;border-bottom:1px solid var(--line)}.report-head h2{margin:5px 0}.empty{text-align:center;padding:65px 20px}.empty-symbol{font-size:32px;background:#edf3ed;border:1px solid var(--line);border-radius:15px;display:inline-block;padding:10px 22px}.empty h3{font-size:20px;margin-bottom:8px}.empty p{max-width:370px;margin:auto}.notice{margin:18px 0;padding:12px 15px;border-radius:10px;background:#edf5f0;border:1px solid #c4ddcd;font-size:13px}.notice.error{background:#fff0ec;border-color:#e9b9aa;color:#8c3523}.notice[hidden]{display:none}.notice.busy:before{content:'';display:inline-block;width:12px;height:12px;border:2px solid #b4cec3;border-top-color:var(--teal);border-radius:50%;animation:spin 1s linear infinite;margin-right:8px}@keyframes spin{to{transform:rotate(360deg)}}#reportContent{overflow-wrap:anywhere}#reportContent h2{font-size:25px;line-height:1.3}#reportContent h3{font-size:19px;border-top:1px solid var(--line);padding-top:25px;margin-top:28px}#reportContent h4{font-size:14px;text-transform:uppercase;letter-spacing:.6px;color:var(--teal);margin-top:22px}#reportContent ul{padding-left:21px}#reportContent li{margin:8px 0}.fact{display:grid;grid-template-columns:minmax(110px,1fr) 2fr;gap:15px;padding:11px 0;border-bottom:1px solid #eef1ed}.fact-label{color:var(--muted);text-transform:capitalize}.fact-value{font-weight:550}.citation{font-size:11px;color:var(--teal);margin-left:7px;text-decoration:none}.source-card{border:1px solid var(--line);border-left:3px solid #c49b49;border-radius:10px;padding:16px;margin:12px 0;background:#fdfdf9}.source-card a{color:var(--teal);font-weight:650;text-decoration:none}.source-card blockquote{margin:12px 0;font-size:13px;white-space:pre-line;color:#4d605e}.source-card .badge{background:#fff6df;color:#765818;border-color:#e4d8b5}.citation-row{padding:8px 0;font-size:12px;overflow-wrap:anywhere}.citation-row a{color:var(--teal)}details{margin-top:22px}summary{cursor:pointer;font-size:13px;color:var(--muted)}#log{white-space:pre-wrap;font:12px/1.6 ui-monospace,monospace;max-height:220px;overflow:auto;padding:16px;background:#edf1ec;border-radius:10px}.footnote{font-size:12px;color:var(--muted);margin-top:20px;max-width:650px}.meta{overflow-wrap:anywhere;margin-top:16px}.report-head button{font-size:12px;padding:8px 11px}@media(max-width:900px){.workspace{grid-template-columns:1fr}.hero{align-items:start}h1{font-size:29px}.shell{padding:24px 16px}.panel{padding:20px}.report-head{flex-wrap:wrap}}@media(prefers-reduced-motion:reduce){.notice.busy:before{animation:none}} 
+#reportContent .empty h3{border:0;padding-top:0;margin-top:18px}
+  </style>
+</head>
+<body>
+<header class="topbar"><div class="brand"><span class="brandmark">u.</span><span>Underwriting workspace</span></div><span class="badge">Company research</span></header>
+<main class="shell">
+<div class="hero"><div><div class="eyebrow">Evidence before conclusions</div><h1>A clearer view of a company.</h1><p>Find the legal entity. Review the evidence. Follow every source.</p></div><button id="newSession">New session</button></div>
+<div id="status" class="notice" role="status" aria-live="polite" hidden></div>
+<div class="workspace">
+<aside class="panel"><div class="step">01 / Find & confirm</div><h2>Start with a company</h2><p class="small">Search by registered name or eight-character Companies House number.</p>
+<label class="field" for="companyQuery">Company name or number</label><input type="text" id="companyQuery" placeholder="e.g. 01357507" autocomplete="off"><button id="resolve" class="primary full">Find company</button>
+<div id="candidates"></div><div id="approvedBox"></div>
+<hr style="border:0;border-top:1px solid var(--line);margin:24px 0"><div class="step">02 / Research</div>
+<label class="field" for="msg">Research focus <span class="small">(optional)</span></label><textarea id="msg" placeholder="e.g. Highlight filing status and relevant web sources"></textarea><p class="small">Guides evidence highlights in local mode. Confirm the legal entity before generating a report.</p><button id="generate" class="primary full" disabled>Generate report</button>
+<p class="footnote">Reports show available evidence and coverage gaps. They are not lending recommendations.</p></aside>
+<section class="panel" id="reportPanel" aria-label="Company report"><div class="report-head"><div><div class="step">03 / Review evidence</div><h2>Company report</h2><div id="reportMeta" class="small">Your research will appear here.</div></div><div class="toolbar"><button id="downloadPdf" disabled>Download PDF</button><button id="copyReport" disabled>Copy report</button></div></div>
+<div id="reportContent"><div class="empty"><span class="empty-symbol" aria-hidden="true">▤</span><h3>From company name to evidence.</h3><p>Find and confirm a company to build a report with registry facts, available web results and traceable citations.</p></div></div>
+</section></div>
+<details><summary>Session activity</summary><div id="log"></div><button id="clear">Clear activity</button><div class="meta">Session: <span id="sid"></span></div></details>
+</main>
+<script>
+  function showStatus(message, kind = "") {
+    const el = document.getElementById("status");
+    el.hidden = false; el.className = "notice " + kind; el.textContent = message;
+  }
+  function safeUrl(value) {
+    try { const u = new URL(value); return ["http:", "https:"].includes(u.protocol) && !u.username && !u.password ? u.href : null; }
+    catch { return null; }
+  }
+  function readable(value) {
+    if (value === null) return "Not supplied";
+    if (typeof value === "boolean") return value ? "Yes" : "No";
+    if (Array.isArray(value)) return value.map(readable).join(", ");
+    if (typeof value === "object") return Object.entries(value).map(([k,v]) => k.replaceAll("_", " ") + ": " + readable(v)).join(" · ");
+    return String(value);
+  }
+  function renderEvidence(text) {
+    return text.split("\n").map(line => {
+      const citation = line.match(/^- (ev_\d+) -> (https?:\/\/\S+)\s*$/);
+      if (citation) {
+        const url = safeUrl(citation[2]);
+        return `<div class="citation-row" id="source-${citation[1]}"><b>${citation[1]}</b> · ${url ? `<a target="_blank" rel="noopener noreferrer" href="${escapeHtml(url)}">${escapeHtml(url)}</a>` : escapeHtml(citation[2])}</div>`;
+      }
+      const fact = line.match(/^- (.+?): (.+) \[(ev_\d+)\]$/);
+      if (fact) {
+        try {
+          const value = JSON.parse(fact[2]);
+          const ref = `<a class="citation" href="#source-${fact[3]}" aria-label="View source ${fact[3]}">[${fact[3]}]</a>`;
+          if (fact[1] === "unverified web search result") {
+            const url = safeUrl(value.url);
+            return `<article class="source-card"><span class="badge">Unverified web source</span><h4>${url ? `<a target="_blank" rel="noopener noreferrer" href="${escapeHtml(url)}">${escapeHtml(value.title || value.url)} ↗</a>` : escapeHtml(value.title || "Search result")}${ref}</h4><blockquote>${escapeHtml(value.excerpt || "")}${value.excerpt_truncated ? "…" : ""}</blockquote><div class="small">${escapeHtml(url ? new URL(url).hostname : "Unknown source")} · Search snippet · Entity match not verified</div></article>`;
+          }
+          return `<div class="fact"><span class="fact-label">${escapeHtml(fact[1])}</span><span class="fact-value">${escapeHtml(readable(value))}${ref}</span></div>`;
+        } catch {
+          // A non-JSON evidence line falls back to the normal Markdown renderer.
+        }
+      }
+      return simpleMarkdownToHtml(line);
+    }).join("\n");
+  }
+
+  async function apiFetch(url, options = {}) {
+    const headers = new Headers(options.headers || {});
+    const token = sessionStorage.getItem("uw_token");
+    if (token) headers.set("X-UI-TOKEN", token);
+    let response = await fetch(url, { ...options, headers });
+    if (response.status === 401) {
+      const supplied = window.prompt("Enter the UI access token");
+      if (supplied) {
+        sessionStorage.setItem("uw_token", supplied);
+        headers.set("X-UI-TOKEN", supplied);
+        response = await fetch(url, { ...options, headers });
+      }
+    }
+    return response;
+  }
+  let approvedCompany = null;
+  let latestReportText = "";
+
+  // Persist session id in localStorage
+  let sid = localStorage.getItem("uw_session_id");
+  if (!sid) {
+    sid = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2));
+    localStorage.setItem("uw_session_id", sid);
+  }
+  document.getElementById("sid").textContent = sid;
+
+  const log = document.getElementById("log");
+  const msg = document.getElementById("msg");
+  const resolveBtn = document.getElementById("resolve");
+  const generateBtn = document.getElementById("generate");
+  const downloadPdfBtn = document.getElementById("downloadPdf");
+  const copyReportBtn = document.getElementById("copyReport");
+  const newSessionBtn = document.getElementById("newSession");
+  const clearBtn = document.getElementById("clear");
+  const candidatesDiv = document.getElementById("candidates");
+  const approvedBox = document.getElementById("approvedBox");
+  const reportMeta = document.getElementById("reportMeta");
+  const reportContent = document.getElementById("reportContent");
+
+  function append(role, text) {
+    log.textContent += `\n[${role}] ${text}\n`;
+    log.scrollTop = log.scrollHeight;
+    if (role === "error") showStatus(text === "TypeError: Failed to fetch" ? "Connection interrupted. The report may still be running; avoid submitting it again immediately." : text, "error");
+  }
+
+  function escapeHtml(str) {
+    return String(str ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;");
+  }
+
+  async function readResponseBody(res) {
+    const raw = await res.text();
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return raw;
+    }
+  }
+
+  function dataToText(data) {
+    const detail = data?.detail ?? data;
+    if (typeof detail === "string") return detail;
+    return [detail?.error, detail?.message].filter(Boolean).join(" ") || "The request could not be completed.";
+  }
+
+  function isSessionStateError(data) {
+    const txt = dataToText(data);
+    return (
+      txt.includes("No approved company for this session") ||
+      txt.includes("No generated report found for this session") ||
+      txt.includes("Please resolve and approve a company first")
+    );
+  }
+
+  function simpleMarkdownToHtml(text) {
+    // Basic markdown-ish renderer (safe enough for your generated report text)
+    const src = String(text ?? "").replace(/\r\n/g, "\n");
+
+    // Escape first (important)
+    let html = escapeHtml(src);
+
+    // Headings
+    html = html.replace(/^###\s+(.+)$/gm, "<h4>$1</h4>");
+    html = html.replace(/^##\s+(.+)$/gm, "<h3>$1</h3>");
+    html = html.replace(/^#\s+(.+)$/gm, "<h2>$1</h2>");
+
+    // Bold / italic
+    html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+    html = html.replace(/(^|\W)\*(?!\*)([^*]+)\*(?!\*)/g, "$1<em>$2</em>");
+
+    // Inline code
+    html = html.replace(/`([^`]+)`/g, "<code style='background:#f3f3f3;padding:1px 4px;border-radius:4px;'>$1</code>");
+
+    // Bullet lists
+    const lines = html.split("\n");
+    const out = [];
+    let inList = false;
+
+    for (const line of lines) {
+      const bulletMatch = line.match(/^\s*[-*]\s+(.+)$/);
+      if (bulletMatch) {
+        if (!inList) {
+          out.push("<ul>");
+          inList = true;
+        }
+        out.push(`<li>${bulletMatch[1]}</li>`);
+      } else {
+        if (inList) {
+          out.push("</ul>");
+          inList = false;
+        }
+        out.push(line);
+      }
+    }
+    if (inList) out.push("</ul>");
+
+    html = out.join("\n");
+
+    // Paragraph-ish line breaks
+    html = html
+      .replace(/\n\n+/g, "<br/><br/>")
+      .replace(/\n/g, "<br/>");
+
+    return html;
+  }
+
+  function clearRenderedReport() {
+    latestReportText = "";
+    reportContent.innerHTML = `<div class="empty"><span class="empty-symbol" aria-hidden="true">▤</span><h3>Ready when you are.</h3><p>Confirm your company, then generate a report to review its evidence.</p></div>`;
+    reportMeta.textContent = "No report generated yet.";
+    copyReportBtn.disabled = true;
+    downloadPdfBtn.disabled = true;
+  }
+
+  function renderReport(text) {
+    latestReportText = String(text ?? "");
+    reportContent.innerHTML = renderEvidence(latestReportText);
+    reportMeta.textContent = latestReportText
+      ? "Evidence report ready · Review source coverage and limitations below."
+      : "No report generated yet.";
+
+    copyReportBtn.disabled = !latestReportText;
+  }
+
+  function renderApproved() {
+    generateBtn.disabled = !approvedCompany;
+    if (!approvedCompany) {
+      approvedBox.innerHTML = "";
+      return;
+    }
+    approvedBox.innerHTML = `
+      <div class="card approved">
+        <b>Approved company:</b> ${escapeHtml(approvedCompany.company_name || "Unknown")} (${escapeHtml(approvedCompany.company_number || "")})
+      </div>
+    `;
+  }
+
+  function resetUiSessionState({ keepLog = false } = {}) {
+    approvedCompany = null;
+    renderApproved();
+    clearRenderedReport();
+    candidatesDiv.innerHTML = "";
+    if (!keepLog) {
+      log.textContent = "";
+    }
+  }
+
+  async function resetBackendSessionState(oldSid) {
+    try {
+      const res = await apiFetch("/api/reset-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: oldSid })
+      });
+      // Best effort only; ignore response parsing errors here
+      await readResponseBody(res);
+    } catch {
+      // Ignore backend reset failures; new sid still helps
+    }
+  }
+
+  async function startNewSession() {
+    const oldSid = sid;
+    await resetBackendSessionState(oldSid);
+
+    sid = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2));
+    localStorage.setItem("uw_session_id", sid);
+    document.getElementById("sid").textContent = sid;
+
+    resetUiSessionState({ keepLog: false });
+    document.getElementById("companyQuery").value = "";
+    msg.value = "";
+    msg.placeholder = "e.g. Highlight filing status and relevant web sources";
+    append("system", "Started a new session.");
+  }
+
+  function maybeHandleSessionError(data) {
+    if (isSessionStateError(data)) {
+      approvedCompany = null;
+      renderApproved();
+      clearRenderedReport();
+    }
+  }
+
+  function renderCandidates(resolution) {
+    const candidates = resolution?.candidates || [];
+    if (!candidates.length) {
+      candidatesDiv.innerHTML = "<div class='card'>No candidates found.</div>";
+      return;
+    }
+
+    const selected = resolution?.selected_company_number || "";
+    const confidence = resolution?.confidence ?? null;
+
+    const header = `
+      <div class="card">
+        <b>Select the legal entity</b><br/>
+        <span class="small">Top match: ${escapeHtml(selected || "none")} ${confidence !== null ? `(confidence ${confidence})` : ""}</span>
+      </div>
+    `;
+
+    const cards = candidates.map((c) => {
+      const number = c.company_number || "";
+      const title = c.title || "";
+      const status = c.company_status || "";
+      const date = c.date_of_creation || "";
+      const score = c.score ?? "";
+      const checked = number === selected ? "checked" : "";
+      return `
+        <label class="card" style="display:block; cursor:pointer;">
+          <input type="radio" name="candidate" value="${escapeHtml(number)}" data-title="${escapeHtml(title)}" ${checked} />
+          <div><b>${escapeHtml(title)}</b> (${escapeHtml(number)})</div>
+          <div class="small">Status: ${escapeHtml(status || "unknown")} | Incorporated: ${escapeHtml(date || "n/a")} | Score: ${escapeHtml(score)}</div>
+        </label>
+      `;
+    }).join("");
+
+    candidatesDiv.innerHTML = header + cards + `<button id="approveCandidate">Approve selected company</button>`;
+
+    document.getElementById("approveCandidate").onclick = async () => {
+      const selectedEl = document.querySelector('input[name="candidate"]:checked');
+      if (!selectedEl) {
+        append("error", "Please select a company to approve.");
+        return;
+      }
+
+      const company_number = selectedEl.value;
+      const company_name = selectedEl.dataset.title || null;
+
+      try {
+        const res = await apiFetch("/api/approve-company", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_id: sid, company_number, company_name })
+        });
+        const data = await readResponseBody(res);
+
+        if (!res.ok) {
+          maybeHandleSessionError(data);
+          append("error", dataToText(data));
+          return;
+        }
+
+        approvedCompany = data.approved_company;
+        renderApproved();
+        candidatesDiv.innerHTML = "";
+        showStatus("Company confirmed. You can now generate its report.");
+        msg.value = "";
+        msg.placeholder = "Optional extra instructions for the report...";
+        append("system", `Approved legal entity: ${approvedCompany.company_name || "Unknown"} (${approvedCompany.company_number})`);
+      } catch (e) {
+        append("error", String(e));
+      }
+    };
+  }
+
+  resolveBtn.onclick = async () => {
+    const text = document.getElementById("companyQuery").value.trim();
+    if (!text) {
+      append("error", "Enter a company name or company number first.");
+      return;
+    }
+
+    append("you", `Resolve company: ${text}`);
+    resolveBtn.disabled = true;
+    approvedCompany = null; renderApproved(); clearRenderedReport(); candidatesDiv.innerHTML = "";
+    newSessionBtn.disabled = true;
+    showStatus("Searching Companies House…", "busy");
+
+    try {
+      const res = await apiFetch("/api/resolve-company", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sid, query: text })
+      });
+
+      const data = await readResponseBody(res);
+
+      if (!res.ok) {
+        maybeHandleSessionError(data);
+        append("error", dataToText(data));
+        return;
+      }
+
+      // New search resets approval + report state
+      approvedCompany = null;
+      renderApproved();
+      clearRenderedReport();
+
+      const resolution = data.resolution || {};
+      append(
+        "system",
+        `Resolved top match: ${resolution.selected_company_number || "none"} (confidence ${resolution.confidence ?? "n/a"})`
+      );
+      renderCandidates(resolution);
+      showStatus("Search complete. Select and confirm the correct legal entity.");
+    } catch (e) {
+      append("error", String(e));
+    } finally {
+      resolveBtn.disabled = false; newSessionBtn.disabled = false;
+    }
+  };
+
+  async function waitForReport() {
+    let failures = 0, idleChecks = 0;
+    while (true) {
+      let res, data;
+      try {
+        res = await apiFetch(`/api/report-status?session_id=${encodeURIComponent(sid)}`, {signal: AbortSignal.timeout(15000)});
+        data = await readResponseBody(res);
+        failures = 0;
+      } catch (error) {
+        if (++failures >= 6) throw new Error("Cannot reconnect to the server. Refresh this page to check the existing report; no new report has been submitted.", {cause: error});
+        await new Promise(resolve => setTimeout(resolve, 2500));
+        continue;
+      }
+      if (!res.ok) throw new Error(dataToText(data));
+      if (data.status === "completed") return data.report;
+      if (data.status === "failed") throw new Error(data.error);
+      if (data.status === "idle" && ++idleChecks >= 3) throw new Error("No report job is running. You can generate a new report.");
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+  }
+
+  async function runReport(resume = false) {
+    if (!approvedCompany) {
+      append("error", "Please resolve and approve a company first.");
+      return;
+    }
+
+    generateBtn.disabled = true;
+    clearRenderedReport();
+    resolveBtn.disabled = true; newSessionBtn.disabled = true;
+    generateBtn.textContent = "Generating…";
+    reportMeta.textContent = "Research in progress";
+    reportContent.innerHTML = `<div class="empty"><span class="empty-symbol" aria-hidden="true">▤</span><h3>Building your evidence report.</h3><p>Gathering available sources and selecting evidence highlights. The elapsed timer above shows how long this request has been running.</p></div>`;
+    const started = Date.now();
+    const updateProgress = () => showStatus(`Generating your evidence report · ${Math.floor((Date.now()-started)/1000)}s elapsed. Registry, search and model requests can take a minute or more.`, "busy");
+    updateProgress();
+    const progressTimer = setInterval(updateProgress, 1000);
+    append("you", `Generate report for approved company: ${approvedCompany.company_name || "Unknown"} (${approvedCompany.company_number})`);
+
+    try {
+      if (!resume) {
+        let res;
+        try {
+          res = await apiFetch("/api/generate-report", {
+            method: "POST", headers: {"Content-Type":"application/json"}, signal: AbortSignal.timeout(15000),
+            body: JSON.stringify({session_id:sid, message:msg.value.trim() || null, background:true})
+          });
+        } catch {
+          append("system", "Checking whether the server accepted the report request…");
+        }
+        if (res && !res.ok && res.status !== 409) {
+          const error = await readResponseBody(res);
+          maybeHandleSessionError(error);
+          throw new Error(dataToText(error));
+        }
+      }
+      const data = await waitForReport();
+
+      append("agent", data.response);
+      renderReport(data.response);
+      showStatus("Report ready. Review the source evidence and limitations below.");
+      document.getElementById("reportPanel").scrollIntoView({behavior:"smooth", block:"start"});
+      downloadPdfBtn.disabled = false;
+    } catch (e) {
+      append("error", String(e));
+    } finally {
+      clearInterval(progressTimer);
+      if (!latestReportText) {
+        reportMeta.textContent = "Report could not be completed.";
+        reportContent.innerHTML = `<div class="empty"><h3>No report published.</h3><p>See the error message above. Your confirmed company is retained.</p></div>`;
+      }
+      generateBtn.disabled = !approvedCompany;
+      generateBtn.textContent = "Generate report";
+      resolveBtn.disabled = false; newSessionBtn.disabled = false;
+    }
+  };
+
+  generateBtn.onclick = () => runReport(false);
+
+  async function restoreReport() {
+    resolveBtn.disabled = true; newSessionBtn.disabled = true;
+    try {
+      const res = await apiFetch(`/api/report-status?session_id=${encodeURIComponent(sid)}`, {signal: AbortSignal.timeout(15000)});
+      if (!res.ok) return;
+      const state = await readResponseBody(res);
+      approvedCompany = state.approved_company || null;
+      renderApproved();
+      if (state.status === "running") return await runReport(true);
+      if (state.status === "completed") {
+        renderReport(state.report.response);
+        downloadPdfBtn.disabled = false;
+        showStatus("Saved report restored.");
+      }
+      if (state.status === "failed") append("error", state.error);
+    } catch { /* A new search can still be started if session restoration fails. */ }
+    finally { resolveBtn.disabled = false; newSessionBtn.disabled = false; }
+  }
+  restoreReport();
+
+  downloadPdfBtn.onclick = async () => {
+    if (!approvedCompany) {
+      append("error", "Please approve a company and generate a report first.");
+      return;
+    }
+    try {
+      const res = await apiFetch(`/api/report-pdf?session_id=${encodeURIComponent(sid)}`);
+      if (!res.ok) { append("error", dataToText(await readResponseBody(res))); return; }
+      const url = URL.createObjectURL(await res.blob());
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "underwriting_report.pdf";
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) { append("error", String(e)); }
+  };
+
+  copyReportBtn.onclick = async () => {
+    if (!latestReportText) {
+      append("error", "No report to copy yet.");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(latestReportText);
+      append("system", "Report copied to clipboard.");
+    } catch {
+      append("error", "Could not copy report to clipboard.");
+    }
+  };
+
+  newSessionBtn.onclick = async () => {
+    newSessionBtn.disabled = true;
+    try {
+      await startNewSession();
+    } finally {
+      newSessionBtn.disabled = false;
+    }
+  };
+
+  document.getElementById("companyQuery").addEventListener("keydown", e => { if (e.key === "Enter" && !resolveBtn.disabled) resolveBtn.click(); });
+
+  clearBtn.onclick = () => {
+    log.textContent = "";
+  };
+</script>
+</body>
+</html>

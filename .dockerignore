@@ -1,0 +1,11 @@
+.venv*
+**/.venv
+.env
+.git
+.data
+tmp
+node_modules
+**/__pycache__
+*.db
+*.db-*
+redteam/results

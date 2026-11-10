@@ -1,0 +1,20 @@
+.venv/
+.venv-redteam/
+.venv-gemma/
+redteam/results/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+node_modules/
+tmp/
+.eslintcache
+.env
+.env.*
+!.env.example
+/New Text Document.txt
+*.db
+*.db-*
+.data/
+
+
+**/.venv/
