@@ -170,6 +170,53 @@ def test_parent_group_disclosures_are_not_relabelled_as_the_bank():
     assert not extract_pillar3(pages, "ALLICA BANK LIMITED", "2025-12-31")
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("external", [False, True])
+async def test_browser_discovery_still_requires_publisher_identity_and_pdf_validation(
+    monkeypatch, external
+):
+    from agent_ui import browser_research, pillar3
+
+    monkeypatch.setenv("BROWSER_RESEARCH_ENABLED", "1")
+    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+
+    async def discover(*args, **kwargs):
+        return browser_research.BrowserDiscovery(
+            status="completed",
+            pages=[
+                browser_research.BrowserPage(
+                    url="https://www.allica.bank/legal",
+                    text="ALLICA BANK LIMITED company number 07706156",
+                    retrieved_at="2026-11-13T00:00:00Z",
+                )
+            ],
+            links=[] if external else ["https://www.allica.bank/pillar3.pdf"],
+            documents=[
+                {
+                    "url": "https://cdn.example.com/pillar3.pdf",
+                    "publisher_page": "https://www.allica.bank/legal",
+                    "label": "Pillar 3",
+                }
+            ]
+            if external
+            else [],
+        )
+
+    async def fetch(client, url, host):
+        if url.endswith("pillar3.pdf"):
+            return b"validated-document", url
+        raise httpx.ConnectError("HTML unavailable; browser evidence retained")
+
+    monkeypatch.setattr(browser_research, "discover", discover)
+    monkeypatch.setattr(pillar3, "fetch_public", fetch)
+    monkeypatch.setattr(pillar3, "pdf_pages", lambda body: source())
+    filings, gap = await pillar3.collect_pillar3("ALLICA BANK LIMITED", "07706156", "2025-12-31")
+    assert gap is None and filings[0]["publisher_page"] == "https://www.allica.bank/legal"
+    assert filings[0]["banking_notes"]["metrics"][0]["issuer_company_number"] == "07706156"
+    filings, gap = await pillar3.collect_pillar3("ALLICA BANK LIMITED", "99999999", "2025-12-31")
+    assert not filings and gap
+
+
 def km1_source(bank):
     return json.loads(
         (Path(__file__).parent / f"fixtures/{bank}_pillar3_pages.json").read_text(encoding="utf-8")
@@ -269,3 +316,81 @@ def test_publisher_crn_zero_padding_requires_company_label():
     assert not publisher_identity(
         "Other Bank PLC Company No. 947662.", "EXAMPLE BANK PLC", "00947662"
     )
+
+
+@pytest.mark.parametrize(
+    "jurisdiction,number",
+    [("England and Wales", "09446231"), ("Scotland", "SC123456"), ("Northern Ireland", "NI123456")],
+)
+def test_registered_company_sentence_binds_exact_legal_name(jurisdiction, number):
+    from agent_ui.pillar3 import publisher_identity
+
+    text = f"Example Bank Limited is a company registered in {jurisdiction} (No.{number})."
+    assert publisher_identity(text, "EXAMPLE BANK LIMITED", number)
+    assert not publisher_identity(text, "OTHER BANK LIMITED", number)
+    assert not publisher_identity(text, "EXAMPLE BANK LIMITED", "99999999")
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Example Bank Limited is regulated by the FCA (No.09446231).",
+        "Example Bank Limited is a company registered in England and Wales. FCA No.09446231.",
+        "Example Bank Limited. Other Bank Limited is a company registered in England and Wales (No.09446231).",
+        "<script>Example Bank Limited is a company registered in England and Wales (No.09446231).</script>",
+    ],
+)
+def test_registration_sentence_cannot_bind_regulator_or_other_company(text):
+    from agent_ui.pillar3 import publisher_identity
+
+    assert not publisher_identity(text, "EXAMPLE BANK LIMITED", "09446231")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "path,mime,size,declared,ok",
+    [
+        ("/report.pdf", "application/octet-stream", 20, None, True),
+        ("/download", "application/pdf", 32, None, True),
+        ("/report.pdf", "application/pdf", 33, None, False),
+        ("/report.pdf", "application/pdf", 1, "33", False),
+        ("/report.pdf", "application/pdf", 33, "1", False),
+        ("/page", "text/html", 11, None, False),
+    ],
+)
+async def test_pdf_and_html_downloads_have_separate_streamed_limits(
+    monkeypatch, path, mime, size, declared, ok
+):
+    import socket
+
+    from agent_ui import pillar3
+
+    monkeypatch.setattr(pillar3, "MAX_BYTES", 10)
+    monkeypatch.setattr(pillar3, "MAX_PDF_BYTES", 32)
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *a, **k: [(2, 1, 6, "", ("8.8.8.8", 443))])
+    consumed = []
+
+    class Stream(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            for i in range(0, size, 5):
+                consumed.append(i)
+                yield b"x" * min(5, size - i)
+
+    headers = {"content-type": mime}
+    if declared is not None:
+        headers["content-length"] = declared
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, headers=headers, stream=Stream())
+        )
+    ) as client:
+        if ok:
+            body, _ = await pillar3.fetch_public(
+                client, "https://example.com" + path, "example.com"
+            )
+            assert len(body) == size
+        else:
+            with pytest.raises(ValueError, match="size budget"):
+                await pillar3.fetch_public(client, "https://example.com" + path, "example.com")
+    if declared == "33":
+        assert consumed == []

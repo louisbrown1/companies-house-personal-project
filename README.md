@@ -101,6 +101,94 @@ are withheld; cash-flow movements are not closing balances. Incomplete core
 figures trigger a higher-resolution pass, retaining earlier validated facts and
 quarantining disagreements across passes.
 
+Table interpretation v9 also recognises printed `£'m` units and `FY25`-style
+column headings. Abbreviated years must map uniquely to an allowed reporting
+period and agree with an explicit statement day/month; bare two-digit numbers
+are not treated as years. Compact OCR contents headings can locate financial
+statements and auditor context without scanning the whole report. Company scope
+still requires explicit issuer-only evidence, and a high-resolution amount can
+retain a stronger literal currency header from the same PDF's standard OCR pass.
+Auditor context searches a bounded neighbourhood around the contents reference.
+A missing comparative cell does not discard an independently validated current
+cell; damaged combined liabilities-and-equity labels cannot establish equity.
+Earlier table-plan cache versions are not reused under these rules.
+
+All Tavily research stages in a full report share one request budget: background
+search, review discovery, Pillar 3 discovery, peer discovery and page extraction.
+`SEARCH_MAX_REQUESTS_PER_REPORT` defaults to 40 search calls and
+`SEARCH_MAX_EXTRACT_REQUESTS_PER_REPORT` to 12 extraction calls. These count
+outbound requests, not provider credits or a guaranteed currency spending cap.
+Authentication and quota errors stop further outbound Tavily calls in that report;
+valid cached responses remain usable. Limits and usage are included in report gaps.
+
+Successful Tavily responses are cached in `.data/research-cache.sqlite3` for
+`SEARCH_CACHE_TTL_SECONDS` (default 3600; 0 disables caching). Extraction responses
+expire after at most 900 seconds. Cache keys include request parameters and a
+hashed account identifier; API keys are not stored. Original retrieval timestamps
+are preserved, stale responses are never used after errors, and the cache is
+bounded to 1,000 entries with a maximum one-day lifetime. Concurrent reports have
+independent budgets. Standalone tool calls retain their existing individual limits.
+
+Google Search grounding is not currently a Tavily replacement in this pipeline.
+Its [grounding terms](https://aistudio.google.com/docs/terms#grounding-with-google-search)
+restrict reusable caching and automated collection of links for crawling, which
+conflicts with the source-discovery/extraction workflow here. A separate
+user-facing grounded research view would need its associated search suggestions
+and must not feed the reusable discovery cache. Local Gemma configuration is
+unchanged.
+
+An experimental browser fallback can recover issuer identity pages and Pillar 3
+discovery links when API discovery fails or returns no usable sources. Install
+with `uv sync --frozen --group browser`, then set `BROWSER_RESEARCH_ENABLED=1`.
+The default `BROWSER_RESEARCH_CHANNEL=msedge` uses an installed Microsoft Edge;
+other environments can use `chromium` after `uv run --group browser playwright
+install chromium`. The browser uses an isolated, headless profile, not a user's
+signed-in browser. `BROWSER_RESEARCH_SEARCH_ENGINE` selects `bing` (default) or
+`duckduckgo`; an access challenge stops the run without switching engines.
+
+Gemma must use a localhost endpoint. It selects observed link IDs through a typed
+schema; it cannot invent addresses or execute scripts. This is DOM/text-based
+navigation, not unrestricted visual computer control. Code stops when the issuer
+identity goal is established. Browser pages and links remain candidates: existing
+registration-number, publisher, reporting-period and PDF-metric validation still
+control report facts. Direct Companies House retrieval is unchanged. General peer
+candidate search and review-site discovery still require the search provider.
+
+Limits default to two browser runs per report, six page steps and 120 seconds per
+run (`BROWSER_RESEARCH_MAX_RUNS`, `BROWSER_RESEARCH_MAX_STEPS`,
+`BROWSER_RESEARCH_TIMEOUT_SEC`). Each page reserves up to 250 subresource requests,
+with a whole-run cap of 250 times the page-step limit, and the run
+reserves a separate navigation allowance of four requests per page step (including
+redirects and frames). It blocks private addresses, non-HTTPS navigation, form submissions, downloads
+and service workers, and closes its browser on completion. Issuer pages have an
+eight-second bounded wait for rendered content. CAPTCHA, HTTP blocks,
+timeouts and incomplete discovery are explicit gaps. Verified issuer URL hints
+expire after one hour in the bounded research cache; pages and PDFs are fetched
+and validated again on every run. Cached hints never supply report evidence.
+Literal issuer URLs in validated accounts also provide discovery candidates with
+page/hash provenance. Gemma sees a shortlist of relevant observed links, with
+its choices recorded in the navigation trace. Serialized PDF links behind download
+buttons are read without executing their handlers. Externally hosted PDFs require
+an explicit link from a verified issuer page as well as document validation.
+Cold discovery waits up to eight seconds for organic results, then broadens an
+empty result through at most three disclosure/legal-name/issuer queries within
+the same navigation and time budgets. Result-specific legal-name/CRN snippets
+prioritise links over similarly named businesses; they never verify identity.
+Fragment and empty-root-path variants count as the same visited page. The report
+research audit records whether each browser run started from search, a supplied
+source or a cached issuer hint. Challenges stop discovery without another query.
+Clearly older Pillar 3 archive links do not end a current-period search while
+relevant landing pages remain. Publisher identity also accepts a legal-name-bound
+"company registered in [UK jurisdiction] (No. ...)" statement; regulator numbers
+and other entities' registration statements cannot satisfy this binding.
+The direct disclosure downloader accepts PDFs up to 25 MB, while HTML remains
+limited to 5 MB. Both declared length and streamed bytes are checked; the existing
+160-page and overall retrieval-time limits still apply.
+Discovery still depends on usable search results; engines or publishers may block
+automation. For cold-discovery regression runs, give each bank a new
+`SEARCH_CACHE_PATH`; this isolates search responses and issuer URL hints, while
+leaving the separate accounts/OCR cache unchanged.
+
 Regression replay: `redteam/results/run_table_interpretation.py` runs the actual
 accounts workflow on frozen public filings with cached OCR and fresh table plans.
 `redteam/results/score_table_interpretation.py` compares its results with 24
@@ -165,12 +253,12 @@ entity identity are retained. Oversized selected context fails explicitly.
 A Companies House API key and running MCP service are
 still required for a real company report.
 
-This initial Gemma profile skips web-review research and records an explicit
-evidence gap: Gemini's built-in Google Search is incompatible with this endpoint.
-It is a registry-focused test profile, not equivalent coverage to the Gemini
-pipeline. Runtime tool-calling and structured-output compatibility must be verified
-with the installed model before interpreting red-team results. Switching models
-does not turn synthetic red-team smoke tests into live model tests.
+Gemma and Gemini use the same validated workflow: registry context, Tavily search,
+verified review aggregates, accounts/OCR and supplementary Pillar 3 discovery.
+The provider controls model inference, not evidence coverage. Model outputs select
+source-backed IDs or constrained extraction fields; code validates evidence,
+calculates financial observations and renders citations. Synthetic red-team tests
+still do not establish live model accuracy.
 
 Local runtime setup (separate environment):
 
@@ -242,7 +330,7 @@ Only API `hits`/`total_results` values supply the search count; unavailable
 counts remain unknown. Counts are not converted into competition or credit
 ratings. This explicitly limited report does not provide free-form business
 analysis or a lending recommendation. User requests guide highlight
-selection only. The Gemini workflow is unchanged.
+selection only. Gemini uses this same workflow.
 
 With `TAVILY_API_KEY` in `.env`, the local workflow invokes an ADK FunctionTool
 for two basic Tavily searches using only the public approved company name/number.
@@ -389,8 +477,7 @@ not independently established causality. Cost details overlap the statement brid
 lease schedules are not added to recognised lease liabilities; funding balances
 are not cash transfers. Blank cells and ambiguous layouts remain unknown. This is
 selected-note analysis, not a complete audit, guarantee or covenant review.
-OCR output still requires source review. The Gemini
-multi-agent path is unchanged.
+OCR output still requires source review. Both providers use this extraction path.
 
 The B&M integration baseline uses **B&M Retail Limited, 01357507**, rather than
 the parent group, and periods ended **28 March 2026** and **29 March 2025**.
@@ -681,3 +768,99 @@ FCA/PRA, charity and tax references. Generic registration labels are accepted on
 opening identity pages; elsewhere a company-specific label is required. Actual
 conflicting company numbers remain a veto, including errors printed in the
 source document. No digit substitution is made to force a match.
+
+
+Typed evidence migration: financial facts, regulatory measurements, banking
+note disclosures and aggregate review ratings are validated with Pydantic at the
+EvidenceItem boundary. Existing structured_fact dictionaries and Markdown output
+retain their wire format and source provenance; typed_fact exposes the validated
+view. Other registry/search evidence remains on the legacy contract during this
+first migration stage. Typed validation does not replace source verification.
+Banking missing-metric, conflict and transcription gaps also retain structured
+records. Supplementary evidence resolves missing gaps by metric, period and
+requested scope, never display-message wording; conflicts remain open. A null gap
+scope means evidence is missing across all scopes, not that scopes are equivalent.
+Resolved gap records are retained in EvidenceBundle.gaps for auditing; existing
+uncertainty strings remain the presentation compatibility layer.
+
+### Shared agent contract
+
+`agent/agent.py` is an ADK adapter for `agent_ui/workflow.py`, also used by the UI.
+Without approval it returns registry candidates and `approval_required`; an ADK
+host must set `session.state["approved_company"]` after user selection, containing
+`company_number` and optionally `company_name`. Prompt text cannot approve or
+replace that entity. The fetched registry identity must match the approved number.
+The UI already persists approval separately from prompts.
+
+`RegistrySettings` validates MCP mode, URL and timeouts. Stdio always launches the
+child with `MCP_TRANSPORT=stdio`, even if the parent serves HTTP. HTTP bearer auth
+and read timeouts are shared across entry points. Toolsets are constructed only
+when explicitly requested; normal orchestration uses bounded FastMCP calls.
+Evidence requires exactly one payload matching its claim. Unknown free-form claims
+are rejected; financial facts, paired notes, regulatory ratios, disclosures and
+published ratings have typed validation. Registry/search metadata remains explicitly
+allowlisted. Existing OKF runbooks provide document-selection guidance; executable
+rules own approval, collection, validation and citations. No runtime monkey patches
+are introduced by this adapter.
+
+### Financial peer comparison
+
+Reports now include a **Financial peer comparison** section. Packaged sector
+runbooks live in `agent/agent_ui/knowledge/peers/`; Pydantic contracts are in
+`peer_models.py` and `peer_discovery_models.py`. Web discovery is in `peer_discovery.py`;
+financial validation and calculations are in `peer_comparison.py`.
+The runbooks contain validated policy limits and bounded guidance for model selection
+of existing comparison IDs. There are no company names, registration numbers or
+issuer-specific page numbers in these runbooks.
+
+Automatic selection first builds a business profile from issuer pages bound to the
+subject's registration number. Tavily searches for candidate businesses; Gemma selects
+statement IDs and copies candidate names with source IDs under Pydantic schemas. Code verifies names occur in those sources and retains the
+exact quotes and URLs. Search snippets propose leads but cannot establish a business
+profile or financial figure. Candidates need issuer-page registration-number binding,
+an active Companies House identity, and supported overlap in products, customers and
+operating geography. Ambiguous parent/subsidiary mappings and subject aliases are rejected.
+Staff biographies, legal boilerplate and registered offices are not business evidence.
+Selection interpretations and inclusion/exclusion reasons appear in the report.
+
+Web discovery has a 240-second ceiling. Candidate names are extracted from up to four
+small source batches, so an empty or invalid batch cannot discard other leads. Up to
+eight distinct business names undergo identity and profile verification. Exact registry
+name matches may guide a targeted registration-number search, but only issuer-page
+evidence establishes the identity. Missing business dimensions trigger one bounded
+follow-up search. Equivalent `www`/bare-host extraction URLs are accepted; unrelated
+hosts and different page paths are not interchangeable.
+It never substitutes SIC-only candidates if search or model validation fails. Financial
+validation attempts at most three accounts extractions to retain up to two peers.
+Filings outside the 93-day comparison window are rejected with their available dates
+shown, without consuming a document extraction attempt or widening that window.
+Identity, active status and SIC are rechecked; dormant accounts are excluded. Banks need
+positive company loans and customer deposits; retail/trading candidates need revenue
+and assets. Company assets at the compared periods must be supported and within the
+runbook's default 10x size limit. These checks do **not** establish regulatory
+authorisation, direct competition or independent ownership. Missing evidence remains a gap.
+
+Bank benchmarks support loans/deposits, accounting equity/assets, CET1, LCR and NSFR
+when extracted evidence supports a comparison. Retail/trading benchmarks support
+current ratio and equity/assets. Code validates source units, scale, scope, dates,
+denominators, conflicts, regulatory basis and averaging windows. Differences between
+percentages are percentage points. Unknown regulatory bases are withheld. The subject
+latest filing is compared with the nearest eligible peer period among its two latest filing records. A single eligible peer document is selected before OCR,
+with both dates and the separation shown; the maximum allowed separation is 93 days.
+If no latest-period benchmark is possible, a whole historical subject period may be compared, explicitly labelled as historical rather than current performance. Individual metrics are never backfilled from another year. Profitability and growth comparisons
+are withheld pending validated period lengths and accounting definitions. Peer extraction skips targeted detailed-note retrieval and extra Pillar 3
+website discovery; regulatory metrics present in statement context may be used, while missing regulatory comparisons remain gaps.
+
+The peer stage has a maximum 600-second budget, reduced to fit the remaining report deadline with time reserved for rendering. It is skipped when no time remains; completed peers survive a later failure or timeout. Optional model highlight selection is also bounded. The first run can be substantially slower because peer documents are newly
+extracted. Use `REPORT_TIMEOUT_SEC=1800` to accommodate the primary report plus this
+stage. Primary company evidence remains available if optional peer comparison fails.
+The bounded sample is not representative: no sector average, ranking, market share,
+competition score or lending recommendation is calculated. Sources and pages for
+both sides of every calculation are retained and displayed; OCR still needs review.
+
+For a deliberately chosen benchmark set, set `PEER_COMPANY_NUMBERS` to at most two
+comma-separated CRNs. Leave it blank for automatic discovery. Explicit selections
+still undergo registry identity, active status, SIC, sector-account and calculation
+validation; the subject excludes itself. Reports disclose whether selection was
+explicit or automatic. A rejected explicit peer is not silently replaced by an
+automatically discovered company.

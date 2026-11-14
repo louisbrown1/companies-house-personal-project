@@ -1,10 +1,7 @@
 """Explicit model selection for Gemini or a self-hosted Gemma endpoint."""
 
-import json
 import os
 from urllib.parse import urlsplit
-
-from google.genai import types
 
 
 def model_provider():
@@ -16,7 +13,9 @@ def model_provider():
 
 def agent_model(*, synthesis=False):
     if model_provider() == "gemini":
-        return "gemini-2.5-pro" if synthesis else "gemini-2.5-flash"
+        from google.adk.models.google_llm import Gemini
+
+        return Gemini(model="gemini-2.5-pro" if synthesis else "gemini-2.5-flash")
     base = os.getenv("GEMMA_API_BASE", "http://127.0.0.1:9379/v1").rstrip("/")
     url = urlsplit(base)
     if (
@@ -52,19 +51,3 @@ def agent_model(*, synthesis=False):
         timeout=600,
         num_retries=0,
     )
-
-
-def unavailable_web_research(callback_context):
-    """Skip the unsupported Gemini search tool without generating invented sources."""
-    result = {
-        "review_sources": [],
-        "trade_press_mentions": [],
-        "positives": [],
-        "negatives": [],
-        "uncertainty": [
-            "Web reviews and trade press were not researched: the Gemma test profile has no web-search provider."
-        ],
-    }
-    text = json.dumps(result)
-    callback_context.state["quality_signals"] = text
-    return types.Content(role="model", parts=[types.Part(text=text)])

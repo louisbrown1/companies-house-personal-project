@@ -5,6 +5,7 @@ from datetime import date
 from decimal import Decimal
 
 from .accounts import normalise, number, rows_from_boxes
+from .evidence_models import EvidenceGap
 from .scoped_accounts import right
 
 RATIOS = {
@@ -230,7 +231,7 @@ def narrative_ratios(page, identity, period, company_name):
 
 
 def extract_banking_notes(document, period, company_name):
-    result = {"metrics": [], "disclosures": [], "gaps": [], "retry_pages": []}
+    result = {"metrics": [], "disclosures": [], "gaps": [], "gap_records": [], "retry_pages": []}
     seen_excerpts = {}
     narrative_retries = set()
     expected = date.fromisoformat(period)
@@ -358,21 +359,39 @@ def extract_banking_notes(document, period, company_name):
             )
             != 1
         ):
-            result["gaps"].append(f"Conflicting {key[0]} values for {key[1]} {key[2]}; withheld.")
+            gap = EvidenceGap(
+                code="conflicting_metric",
+                metric=key[0],
+                scope=key[1],
+                period=key[2],
+                message=f"Conflicting {key[0]} values for {key[1]} {key[2]}; withheld.",
+            )
+            result["gap_records"].append(gap.model_dump(mode="json"))
+            result["gaps"].append(gap.message)
         else:
             result["metrics"].append(values[0])
     for key in ("cet1", "lcr", "nsfr", "regulatory_capital"):
         if not any(m["metric"] == key and m["period"] == period for m in result["metrics"]):
-            result["gaps"].append(
-                f"{NAMES[key]}: no reliable, explicitly scoped value extracted for {period}. This does not establish that it is undisclosed elsewhere."
+            gap = EvidenceGap(
+                code="missing_metric",
+                metric=key,
+                period=period,
+                message=f"{NAMES[key]}: no reliable, explicitly scoped value extracted for {period}. This does not establish that it is undisclosed elsewhere.",
             )
+            result["gap_records"].append(gap.model_dump(mode="json"))
+            result["gaps"].append(gap.message)
     result["retry_pages"] = (
         sorted(narrative_retries) + sorted(set(result["retry_pages"]) - narrative_retries)
     )[:6]
-    result["gaps"].extend(
-        f"Page {page}: low-confidence note transcription withheld; source review required."
-        for page in sorted(narrative_retries)
-    )
+    for page in sorted(narrative_retries):
+        gap = EvidenceGap(
+            code="uncertain_transcription",
+            period=period,
+            page=page,
+            message=f"Page {page}: low-confidence note transcription withheld; source review required.",
+        )
+        result["gap_records"].append(gap.model_dump(mode="json"))
+        result["gaps"].append(gap.message)
     result["gaps"].append(
         "Published ratios and management compliance statements do not establish current regulatory compliance. Firm-specific requirements, buffers, reporting basis and Pillar 3 disclosures require review. No LCR/NSFR proxy is calculated."
     )
@@ -478,6 +497,7 @@ def add_banking_note_evidence(bundle, groups, filings):
         if not notes:
             continue
         bundle.uncertainty.extend(notes["gaps"])
+        bundle.gaps.extend(EvidenceGap.model_validate(g) for g in notes.get("gap_records", []))
         metrics = notes["metrics"]
         metric_ids = {}
         for m in metrics:

@@ -7,6 +7,8 @@ from urllib.parse import urlsplit
 import httpx
 from google.adk.tools import FunctionTool
 
+from .research_requests import post_json
+
 
 async def company_web_search(company_name: str, company_number: str) -> dict:
     """Search public company background and reviews/news; at most two basic requests."""
@@ -21,7 +23,8 @@ async def company_web_search(company_name: str, company_number: str) -> dict:
         for query in queries:
             record = {"query": query}
             try:
-                response = await client.post(
+                response = await post_json(
+                    client,
                     "https://api.tavily.com/search",
                     headers={"Authorization": f"Bearer {key}"},
                     json={
@@ -80,7 +83,8 @@ async def company_web_search(company_name: str, company_number: str) -> dict:
                             "excerpt": snippet[:600],
                             "excerpt_truncated": len(snippet) > 600,
                             "query": query,
-                            "retrieved_at": datetime.now(timezone.utc).isoformat(),
+                            "retrieved_at": data.get("_research", {}).get("retrieved_at")
+                            or datetime.now(timezone.utc).isoformat(),
                             "entity_match": "unverified",
                             "content_type": "search_snippet",
                         }

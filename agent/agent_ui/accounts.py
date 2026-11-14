@@ -613,7 +613,9 @@ def extract_figures(document, period, company_name, column=0):
     return figures, list(dict.fromkeys(gaps))
 
 
-async def collect_accounts(company_number, company_name, registry_tool, company_type=None):
+async def collect_accounts(
+    company_number, company_name, registry_tool, company_type=None, *, include_notes=True
+):
     result = {"filings": [], "gaps": []}
     try:
         history = await registry_tool(
@@ -686,7 +688,10 @@ async def collect_accounts(company_number, company_name, registry_tool, company_
                         f"{period}: document cover identity/period could not be verified; extraction withheld."
                     )
                     continue
+                from .browser_research import document_issuer_links
                 from .table_interpretation import prepare_context
+
+                filing["issuer_website_candidates"] = document_issuer_links(document, company_name)
 
                 if os.getenv("DOCUMENT_MEMORY_ENABLED", "0") == "1":
                     from .document_memory import DocumentMemory
@@ -799,7 +804,16 @@ async def collect_accounts(company_number, company_name, registry_tool, company_
                             f"{period}: No validated statement facts after section discovery and model-assisted mapping."
                         )
                     # Banking disclosures have their own scope/unit rules.
-                    if filing["banking"] and item is selected[0]:
+                    if filing["banking"] and not include_notes:
+                        from .banking_notes import extract_banking_notes
+
+                        filing["banking_notes"] = extract_banking_notes(
+                            document, period, company_name
+                        )
+                        result["gaps"].append(
+                            "Detailed notes not retrieved; regulatory coverage is limited to statement context."
+                        )
+                    elif filing["banking"] and item is selected[0]:
                         try:
                             from .banking_notes import extract_banking_notes
                             from .page_selection import select_note_pages
@@ -847,7 +861,7 @@ async def collect_accounts(company_number, company_name, registry_tool, company_
                     filing, document, company_type or "trading", prior_period, document_memory
                 )
                 result["gaps"].extend(f"{period}: {gap}" for gap in gaps)
-                if item is selected[0]:
+                if include_notes and item is selected[0]:
                     try:
                         from .accounts_notes import extract_notes
                         from .page_selection import select_note_pages

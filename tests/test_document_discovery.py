@@ -3,7 +3,7 @@ from copy import deepcopy
 import pytest
 
 from agent_ui.document_context import bind_document, canonical_number, section_scope
-from agent_ui.document_discovery import contents_entries, discover, heading_matches
+from agent_ui.document_discovery import contents_entries, discover, heading_matches, title_kind
 
 
 def box(text, x=40, y=50, width=200):
@@ -12,6 +12,13 @@ def box(text, x=40, y=50, width=200):
         "score": 1,
         "box": [[x, y], [x + width, y], [x + width, y + 15], [x, y + 15]],
     }
+
+
+def test_compact_ocr_contents_titles_match_only_known_statement_headings():
+    assert title_kind("Financialstatements") == "financial_section"
+    assert title_kind("Statementoffinancialposition") == "statement"
+    assert heading_matches("Financialstatements", "Financial statements")
+    assert title_kind("Strategicstatement") is None
 
 
 @pytest.mark.parametrize("before", [True, False])

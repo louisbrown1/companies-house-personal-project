@@ -1,5 +1,4 @@
 import json
-from types import SimpleNamespace
 
 import pytest
 
@@ -22,10 +21,10 @@ EVIDENCE = {
     "evidence": [
         {
             "evidence_id": "ev_001",
-            "claim": "Company exists",
+            "claim": "company_number",
             "source": {"url": "https://example.com/company", "kind": "companies_house_api"},
             "verbatim_excerpt": "",
-            "structured_fact": {},
+            "structured_fact": {"company_number": "12345678"},
             "confidence": 1.0,
         }
     ],
@@ -96,11 +95,8 @@ def test_malformed_evidence_rejected():
 
 def test_approved_workflow_skips_entity_selection():
     root = agent.build_root_agent(approved_context=True)
-    assert [a.name for a in root.sub_agents] == [
-        "ParallelResearch",
-        "EvidenceExtractor",
-        "UnderwritingSynthesizer",
-    ]
+    assert root.approved_context
+    assert root.sub_agents == []
 
 
 def test_mcp_auth_forwarded(monkeypatch):
@@ -125,9 +121,12 @@ async def test_local_model_timeout_does_not_replay_cpu_work(monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("final_author", ["UnderwritingSynthesizer", "EvidenceExtractor"])
-async def test_runtime_uses_approved_number_and_requires_synthesizer(monkeypatch, final_author):
-    calls, runs = [], []
+@pytest.mark.parametrize("provider", ["gemma", "gemini"])
+async def test_shared_workflow_uses_approved_identity(monkeypatch, provider):
+    from agent_ui import workflow
+
+    monkeypatch.setenv("MODEL_PROVIDER", provider)
+    calls = []
 
     async def registry(name, args):
         calls.append((name, args))
@@ -136,44 +135,31 @@ async def test_runtime_uses_approved_number_and_requires_synthesizer(monkeypatch
             "profile": {"company_number": "12345678", "company_name": "Real Name"},
         }
 
+    async def report(pack, message, tool, **kwargs):
+        assert pack["profile"]["company_name"] == "Real Name"
+        assert tool is registry
+        return REPORT
+
     monkeypatch.setattr(ui, "call_registry_tool", registry)
-
-    class FakeRunner:
-        def __init__(self, agent, app_name, session_service):
-            self.service = session_service
-            self.closed = False
-            runs.append(self)
-
-        async def run_async(self, user_id, session_id, **kwargs):
-            self.sid = session_id
-            self.session = await self.service.get_session(
-                app_name=ui.APP_NAME, user_id=user_id, session_id=session_id
-            )
-            assert json.loads(self.session.state["company_context"])["company_name"] == "Real Name"
-            # Validation is tested separately; mimic a completed pipeline here.
-            yield SimpleNamespace(
-                author=final_author,
-                partial=False,
-                is_final_response=lambda: True,
-                content=SimpleNamespace(parts=[SimpleNamespace(text=REPORT)]),
-            )
-
-        async def close(self):
-            self.closed = True
-
-    monkeypatch.setattr(ui, "Runner", FakeRunner)
-    monkeypatch.setattr(ui, "validate_report", lambda *args: None)
-    approved = {"company_number": "12345678", "company_name": "Spoofed"}
-    if final_author == "UnderwritingSynthesizer":
-        assert await ui.run_agent_turn(approved, "Research another company") == REPORT
-    else:
-        with pytest.raises(RuntimeError, match="synthesizer"):
-            await ui.run_agent_turn(approved, "Research another company")
-    assert calls == [("underwriting_pack", {"company_number": "12345678"})]
-    assert runs[0].closed
+    monkeypatch.setattr(workflow, "generate_local_report", report)
     assert (
-        await runs[0].service.get_session(
-            app_name=ui.APP_NAME, user_id=ui.USER_ID, session_id=runs[0].sid
+        await ui.run_agent_turn(
+            {"company_number": "12345678", "company_name": "Spoofed"}, "Research another company"
         )
-        is None
+        == REPORT
     )
+    assert calls == [("underwriting_pack", {"company_number": "12345678"})]
+
+
+@pytest.mark.asyncio
+async def test_wrong_registry_entity_rejected():
+    from agent_ui.workflow import generate_report
+
+    async def registry(*args):
+        return {
+            "company_number": "12345678",
+            "profile": {"company_number": "87654321", "company_name": "Wrong"},
+        }
+
+    with pytest.raises(ValueError, match="different company"):
+        await generate_report({"company_number": "12345678"}, "", registry)

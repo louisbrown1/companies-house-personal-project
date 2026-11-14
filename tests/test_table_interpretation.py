@@ -1,4 +1,5 @@
 import asyncio
+import json
 from copy import deepcopy
 
 import pytest
@@ -76,6 +77,119 @@ def test_model_maps_unfamiliar_label_but_amount_is_copied_from_source():
         f["scale"] == 1000 and f["source_box"] and f["cell_id"] and f["pdf_sha256"] == "synthetic"
     )
     assert not audit["rejected"]
+
+
+def test_missing_comparative_cell_does_not_hide_valid_current_period_cell():
+    doc = document()
+    doc["pages"][0]["boxes"] = [b for b in doc["pages"][0]["boxes"] if b["text"] != "1101"]
+    table = tables.build_tables(doc, ["2026-06-30", "2025-06-30"])[0]
+    facts, audit = tables.validate_plan(proposal(table), table)
+    assert facts["group", "2026-06-30", "profit_before_tax"]["value"] == "1100"
+    assert not audit["rejected"]
+    other, _ = tables.validate_plan(proposal(table, column=1), table)
+    assert not other
+
+
+@pytest.mark.parametrize(
+    "label",
+    [
+        "Total liabilities and equity",
+        "Total liabilitles and equity",
+        "Total liabililies and equity",
+    ],
+)
+def test_combined_total_with_ocr_damage_cannot_become_equity(label):
+    assert not tables.metric_compatible("total_equity", label)
+    assert tables.metric_compatible("total_equity", "Total equity")
+
+
+def test_fiscal_year_headers_and_apostrophe_millions_need_explicit_date_anchor():
+    doc = document()
+    boxes = doc["pages"][0]["boxes"]
+    for b in boxes:
+        if b["text"] in {"2026", "2025"}:
+            b["text"] = "FY" + b["text"][-2:]
+        if b["text"] == "GBP000":
+            b["text"] = "£’m"
+    assert tables.build_tables(doc, ["2026-06-30", "2025-06-30"]) == []
+    boxes.append(cell("For the year ended 30 June 2026", 20, 55, 250))
+    table = tables.build_tables(doc, ["2026-06-30", "2025-06-30"])[0]
+    assert [c["periods"] for c in table["columns"]] == [["2026-06-30"], ["2025-06-30"]]
+    assert all(c["units"][0]["scale"] == 1000000 for c in table["columns"])
+    assert not tables.fiscal_header_years("25", ["2025-06-30"], ["2025-06-30"])
+    assert not tables.fiscal_header_years("FY25", ["2025-03-31"], ["2025-06-30"])
+    assert tables.unit_scale("E'm") is None
+
+
+def test_high_resolution_retains_stronger_literal_unit_from_same_pdf(monkeypatch, tmp_path):
+    standard = document()
+    high = deepcopy(standard)
+    for b in high["pages"][0]["boxes"]:
+        if b["text"] == "GBP000":
+            b["score"] = 0.80
+    (tmp_path / "synthetic-ocr-v5.json").write_text(json.dumps(standard), encoding="utf-8")
+    monkeypatch.setattr(tables.accounts, "CACHE", tmp_path)
+    table = tables.build_tables(high, ["2026-06-30", "2025-06-30"])[0]
+    facts, _ = tables.validate_plan(proposal(table), table)
+    assert facts["group", "2026-06-30", "profit_before_tax"]["scale"] == 1000
+    assert (
+        "standard-unit"
+        in facts["group", "2026-06-30", "profit_before_tax"]["interpretation_evidence"]["unit"][
+            "id"
+        ]
+    )
+
+
+def test_merged_auditor_contents_heading_triggers_bounded_context_retrieval(monkeypatch):
+    from agent_ui import document_navigation
+
+    doc = document()
+    doc["page_count"] = 150
+    doc["discovery"] = {"contents": [{"title": "Independentauditor'sreport", "printed_page": 129}]}
+    requested = []
+
+    def read(path, document, pages):
+        requested.extend(pages)
+        return [{"page": p, "boxes": []} for p in pages]
+
+    monkeypatch.setattr(document_navigation, "read_pages", read)
+    result = tables.prepare_context(None, doc)
+    assert requested == [127, 128, 129, 130, 131] and result["table_context_pages"] == requested
+
+
+@pytest.mark.parametrize(
+    "heading,accepted",
+    [
+        ("Independent auditors' report. Report on the audit of the financial statements.", True),
+        ("Directors' report.", False),
+    ],
+)
+def test_named_company_opinion_requires_audit_context_when_body_ocr_is_damaged(heading, accepted):
+    doc = document()
+    text = (
+        heading
+        + " In our opinion, Example Limited's financial statements give a true and fair view of the company's affairs. We have audited the financial staterments. Basis for opinion"
+    )
+    doc["pages"].append({"page": 2, "boxes": [cell(text, 20, 30, 800)]})
+    assert bool(tables.opinion_scope(doc)) is accepted
+
+
+@pytest.mark.parametrize(
+    "issuer,extra,accepted",
+    [
+        ("Example Limited", "", True),
+        ("Other Limited", "", False),
+        ("Example Limited", "These consolidated statements cover subsidiaries.", False),
+    ],
+)
+def test_opinion_first_scope_requires_named_issuer_company_and_no_group(issuer, extra, accepted):
+    doc = document()
+    text = (
+        f"In our opinion, {issuer}'s financial statements give a true and fair view of the company's affairs. "
+        f"We have audited the financial statements included in the annual report. {extra} Basis for opinion"
+    )
+    doc["pages"].append({"page": 2, "boxes": [cell(text, 20, 30, 800)]})
+    assert bool(tables.opinion_scope(doc)) is accepted
 
 
 @pytest.mark.parametrize(

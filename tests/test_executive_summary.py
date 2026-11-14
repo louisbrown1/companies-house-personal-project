@@ -73,6 +73,8 @@ def test_summary_keeps_ratings_separate_and_extraction_caveat():
         "platform_customer_rating",
         {
             "status": "confirmed_via_tavily_extract",
+            "provider": "Trustpilot",
+            "entity_match": "name_match_only; legal entity not independently verified",
             "rating": 3.9,
             "scale_max": 5,
             "review_count": 6640,

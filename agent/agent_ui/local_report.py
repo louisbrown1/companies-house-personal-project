@@ -1,6 +1,8 @@
-"""Grounded local reports: code owns facts/citations; Gemma selects highlights."""
+"""Grounded reports: code owns facts/citations; models select source-backed highlights."""
 
+import asyncio
 import json
+import os
 from typing import Literal
 from urllib.parse import urlencode
 
@@ -11,8 +13,9 @@ from pydantic import ConfigDict, Field, create_model
 from .accounts import collect_accounts
 from .executive_summary import render_executive_summary
 from .financial_health import add_financial_evidence
-from .model_config import agent_model
+from .model_config import agent_model, model_provider
 from .registry_context import LOCAL_SCOPE
+from .research_requests import research_budget, usage_summary
 from .review_ratings import enrich_review_ratings
 from .review_sentiment import (
     add_review_evidence,
@@ -217,6 +220,7 @@ def validate_selection(text, allowed_ids):
 
 
 def render_report(bundle, groups, selected):
+    model_name = "Gemma" if model_provider() == "gemma" else "Gemini"
     by_id = {item.evidence_id: item for item in bundle.evidence}
     # Validate even when called outside the model adapter.
     selected = validate_selection(json.dumps({"selected_ids": selected}), list(by_id))
@@ -229,12 +233,12 @@ def render_report(bundle, groups, selected):
         # JSON escapes embedded newlines; the UI and PDF renderers escape HTML.
         return f"- {item.claim.replace('_', ' ')}: {value} [{eid}]"
 
-    lines = ["# Company evidence report — local Gemma", ""]
+    lines = [f"# Company evidence report — {model_name}", ""]
     lines += render_executive_summary(bundle, groups)
     lines += [
         "",
         "## Business Model Summary",
-        "Gemma selected the highlights below; citations are assembled from registry data and attributed web search results.",
+        f"{model_name} selected the highlights below; citations are assembled from registry data and attributed web search results.",
         "Business activities beyond registered SIC codes have not been verified.",
         "",
         "### Selected highlights",
@@ -318,7 +322,7 @@ def render_report(bundle, groups, selected):
                 "Overall customer rating: unavailable; no profile rating has been verified."
             )
         lines.append(
-            "Supporting excerpts only: these do not represent the overall score or a representative sample. Gemma labels their sentiment separately."
+            f"Supporting excerpts only: these do not represent the overall score or a representative sample. {model_name} labels their sentiment separately."
         )
         lines += [fact(eid) for eid in provider["evidence_ids"]] or [
             "Insufficient evidence for sentiment analysis."
@@ -332,9 +336,9 @@ def render_report(bundle, groups, selected):
             else "Scope: standalone company accounts for the latest two available reporting periods. "
         )
         + "Figures are extracted by OCR and require source review; brackets retain the filing's sign convention.",
-        "Calculations are performed in code. Gemma selects the financial observations below from those calculations; this is not a credit rating.",
+        f"Calculations are performed in code. {model_name} selects the financial observations below from those calculations; this is not a credit rating.",
         "",
-        "### Gemma financial observations",
+        f"### {model_name} financial observations",
     ]
     for eid in groups.get("financial_selected", []):
         observation = by_id[eid].structured_fact["financial_observation"]
@@ -344,7 +348,7 @@ def render_report(bundle, groups, selected):
         )
     if not groups.get("financial_selected"):
         lines.append(
-            "No Gemma financial observations available; see extracted figures and limitations below."
+            f"No {model_name} financial observations available; see extracted figures and limitations below."
         )
     if groups.get("banking"):
         lines.append(
@@ -410,6 +414,9 @@ def render_report(bundle, groups, selected):
                 lines.append(
                     f"- {label}: unavailable from reliably extracted current-period disclosures. Review the original filing and relevant Pillar 3 disclosure; no proxy or compliance conclusion is used."
                 )
+    from .peer_comparison import render_peers
+
+    lines += render_peers(groups)
     lines += ["", "## Explicit Citation Block"]
     lines += [f"- {item.evidence_id} -> {item.source.url}" for item in bundle.evidence]
     lines += ["", "## Uncertainty and Limitations"] + ["- " + gap for gap in bundle.uncertainty]
@@ -423,7 +430,10 @@ def render_report(bundle, groups, selected):
     return report
 
 
-async def generate_local_report(pack, user_text, registry_tool):
+@research_budget
+async def generate_local_report(pack, user_text, registry_tool, *, deadline=None):
+    if deadline is None:
+        deadline = asyncio.get_running_loop().time() + int(os.getenv("REPORT_TIMEOUT_SEC", "600"))
     profile = pack["profile"]
     location = profile.get("registered_office_address", {}).get("locality")
     args = {
@@ -471,27 +481,23 @@ async def generate_local_report(pack, user_text, registry_tool):
             profile["company_name"],
             pack["company_number"],
             period,
-            known_sources=[r["url"] for r in web.get("results", [])],
+            known_sources=[r["url"] for r in web.get("results", [])]
+            + [
+                s["url"]
+                for f in accounts["filings"]
+                for s in f.get("issuer_website_candidates", [])
+            ],
         )
         accounts["supplemental_filings"] = supplements
         if gap:
             accounts["gaps"].append(gap)
         else:
-            from .banking_notes import NAMES
+            from .evidence_models import resolve_metric_gaps
 
-            recovered = {
-                m["metric"]
-                for f in supplements
-                for m in f["banking_notes"]["metrics"]
-                if m["period"] == period
-            }
+            recovered = [m for f in supplements for m in f["banking_notes"]["metrics"]]
             for filing in accounts["filings"]:
                 if filing["period"] == period and filing.get("banking_notes"):
-                    filing["banking_notes"]["gaps"] = [
-                        g
-                        for g in filing["banking_notes"]["gaps"]
-                        if not any(g.startswith(NAMES[m] + ": no reliable") for m in recovered)
-                    ]
+                    resolve_metric_gaps(filing["banking_notes"], recovered)
     add_financial_evidence(bundle, groups, accounts)
     context = load_context("bank" if groups.get("banking") else company_type)
     if context["manifest"]["excluded"]:
@@ -517,6 +523,33 @@ async def generate_local_report(pack, user_text, registry_tool):
             )
         except Exception:
             bundle.uncertainty.append(
-                "Gemma financial observation selection failed. Extracted financial figures remain available, without a model assessment."
+                "Model financial observation selection failed. Extracted financial figures remain available, without a model assessment."
             )
+    from .peer_comparison import add_peer_evidence, collect_peer_comparison
+
+    try:
+        peers, guidance = await collect_peer_comparison(
+            pack, accounts, registry_tool, company_type, deadline=deadline - 30
+        )
+        add_peer_evidence(bundle, groups, peers)
+        peer_ids = set(groups["peer_comparisons"][:4])
+        if peer_ids:
+            candidates = EvidenceBundle(
+                evidence=[item for item in bundle.evidence if item.evidence_id in peer_ids],
+                uncertainty=[],
+            )
+            try:
+                async with asyncio.timeout(
+                    max(0.001, min(30, deadline - asyncio.get_running_loop().time() - 5))
+                ):
+                    groups["peer_highlights"] = await select_highlights(candidates, guidance)
+            except Exception:
+                bundle.uncertainty.append(
+                    "Peer highlight selection failed; validated comparisons remain available."
+                )
+    except Exception:
+        bundle.uncertainty.append(
+            "Peer comparison unavailable; primary company evidence remains available."
+        )
+    bundle.uncertainty.append("Research usage: " + json.dumps(usage_summary(), sort_keys=True))
     return render_report(bundle, groups, selected)

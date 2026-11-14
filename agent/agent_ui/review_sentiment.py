@@ -13,6 +13,7 @@ from google.genai import types
 from pydantic import ConfigDict, create_model
 
 from .model_config import agent_model
+from .research_requests import post_json
 from .validation import EvidenceItem, parse_model_json
 
 PROVIDERS = {
@@ -160,7 +161,8 @@ async def company_review_search(company_name: str, company_number: str) -> dict:
             query = f'"{name}" UK customer reviews {provider["provider"]}'
             provider["query"] = query
             try:
-                response = await client.post(
+                response = await post_json(
+                    client,
                     "https://api.tavily.com/search",
                     headers={"Authorization": f"Bearer {key}"},
                     json={
@@ -222,7 +224,8 @@ async def company_review_search(company_name: str, company_number: str) -> dict:
                             "title": str(item.get("title", ""))[:160],
                             "excerpt": excerpt[:1000],
                             "excerpt_truncated": len(excerpt) > 1000,
-                            "retrieved_at": datetime.now(timezone.utc).isoformat(),
+                            "retrieved_at": data.get("_research", {}).get("retrieved_at")
+                            or datetime.now(timezone.utc).isoformat(),
                             "entity_match": identity["relation"],
                             "profile_identity": identity,
                             "discovered_via": "provider_search",
@@ -402,7 +405,7 @@ def add_review_evidence(bundle, groups, search):
             entry["evidence_ids"].append(eid)
         groups["reviews"].append(entry)
     bundle.uncertainty.append(
-        "Review sentiment is a Gemma interpretation of bounded search snippets, not full reviews or a representative sample. "
+        "Review sentiment is a model interpretation of bounded search snippets, not full reviews or a representative sample. "
         "Platform aggregate ratings require profile content with an explicit scale and exact count. Tavily-extracted profiles may be cached. Date checked is retrieval time, not the platform's update time. "
         "Legal-entity matches, authenticity and individual review dates remain unverified. No overall rating across platforms, trend, positive-review percentage or credit inference is calculated. "
         "No usable search results does not mean a company has no reviews."

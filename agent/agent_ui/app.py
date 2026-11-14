@@ -7,7 +7,6 @@ import os
 import secrets
 import time
 import traceback
-import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -15,11 +14,6 @@ from xml.sax.saxutils import escape as xml_escape
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
-from fastmcp import Client as McpClient
-from google.adk.agents.run_config import RunConfig
-from google.adk.runners import Runner
-from google.adk.sessions import InMemorySessionService
-from google.genai import types
 from pydantic import BaseModel, ConfigDict, Field
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
@@ -27,28 +21,20 @@ from reportlab.lib.units import mm
 from reportlab.platypus import Paragraph, Preformatted, SimpleDocTemplate, Spacer
 from sqlalchemy.engine import make_url
 
-from agent import build_root_agent
-
-from .local_report import generate_local_report
 from .model_config import model_provider
-from .registry_context import compact_registry_context
+from .registry import call_registry_tool
 from .state import StateConflict, StateStore
-from .validation import ReportValidationError, validate_report
+from .validation import ReportValidationError
+from .workflow import generate_report as generate_validated_report
+from .workflow import resolve_company
 
 # -----------------------------
 # Config
 # -----------------------------
-APP_NAME = os.getenv("APP_NAME", "underwriting_ui")
-USER_ID = os.getenv("USER_ID", "ui_user")
 
 # Optional simple protection for a public service:
 # set AGENT_UI_TOKEN, then client must send header X-UI-TOKEN: <token>
 AGENT_UI_TOKEN = os.getenv("AGENT_UI_TOKEN")
-
-# MCP endpoint (same one used by agent.py)
-CH_MCP_URL = os.getenv("CH_MCP_URL")
-# Optional bearer token for private MCP service (not needed if public)
-CH_MCP_AUTH = os.getenv("CH_MCP_AUTH")
 
 # Debug toggles
 DEBUG_ERRORS = os.getenv("DEBUG_ERRORS", "0") == "1"
@@ -218,31 +204,6 @@ def _build_report_pdf_bytes(report_record: dict[str, Any]) -> bytes:
     return pdf_bytes
 
 
-def _extract_text_from_event(event) -> Optional[str]:
-    """Collect text parts from an ADK event safely."""
-    content = getattr(event, "content", None)
-    if not content:
-        return None
-
-    parts = getattr(content, "parts", None)
-    if not parts:
-        return None
-
-    texts: list[str] = []
-    for p in parts:
-        t = getattr(p, "text", None)
-        if t:
-            texts.append(t)
-
-    if not texts:
-        return None
-    return "\n".join(texts)
-
-
-def _is_partial_event(event) -> bool:
-    return bool(getattr(event, "partial", False))
-
-
 def _flatten_exception_messages(exc: BaseException) -> list[str]:
     """Unwrap Python 3.11 ExceptionGroup / TaskGroup errors into readable causes."""
     msgs: list[str] = []
@@ -314,112 +275,12 @@ def _http_exception_for_agent_error(exc: Exception) -> HTTPException:
     return HTTPException(status_code=500, detail=detail)
 
 
-def _extract_mcp_json_result(result: Any) -> dict:
-    """
-    Parse FastMCP call_tool result robustly.
-    Handles both structured .data and list-of-content-part formats.
-    """
-    data = getattr(result, "data", None)
-    if isinstance(data, dict):
-        return data
-
-    if isinstance(result, (list, tuple)) and len(result) > 0:
-        first = result[0]
-        text = getattr(first, "text", None)
-        if text:
-            return json.loads(text)
-
-    content = getattr(result, "content", None)
-    if isinstance(content, (list, tuple)) and len(content) > 0:
-        text = getattr(content[0], "text", None)
-        if text:
-            return json.loads(text)
-
-    raise RuntimeError("Unable to parse MCP tool result as JSON.")
-
-
-async def call_registry_tool(name: str, arguments: dict) -> dict:
-    if not CH_MCP_URL:
-        raise RuntimeError("CH_MCP_URL is required by the UI service.")
-    client_kwargs = {"auth": CH_MCP_AUTH} if CH_MCP_AUTH else {}
-    async with asyncio.timeout(120), McpClient(CH_MCP_URL, **client_kwargs) as client:
-        result = await client.call_tool(name, arguments)
-        if getattr(result, "is_error", False):
-            raise RuntimeError("Registry tool failed")
-        return _extract_mcp_json_result(result)
-
-
 async def resolve_company_via_mcp(query: str) -> dict:
-    return await call_registry_tool("resolve_company", {"identifier_or_name": query})
+    return await resolve_company(query, call_registry_tool)
 
 
 async def run_agent_turn(approved: dict, user_text: str) -> str:
-    # Fetch authoritative data in code; never ask a model to choose the entity again.
-    number = approved["company_number"]
-    pack = await call_registry_tool("underwriting_pack", {"company_number": number})
-    profile = pack.get("profile", {})
-    if pack.get("company_number") != number or profile.get("company_number") != number:
-        raise ValueError("Registry returned a different company")
-    company_name = profile["company_name"]
-    address = profile.get("registered_office_address", {})
-    local_profile = model_provider() == "gemma"
-    model_pack = compact_registry_context(pack) if local_profile else pack
-    if local_profile:
-        return await generate_local_report(model_pack, user_text, call_registry_tool)
-    initial_state = {
-        "registry_pack": json.dumps(model_pack, separators=(",", ":")),
-        "entity_resolution": json.dumps(
-            {
-                "selected_company_number": number,
-                "selected_company_name": company_name,
-                "confidence": 1.0,
-            }
-        ),
-        "company_context": json.dumps(
-            {
-                "resolved": True,
-                "company_number": number,
-                "company_name": company_name,
-                "search_names": [company_name],
-                "location_hint": address.get("locality") or address.get("postal_code"),
-                "website_hint": None,
-                "sic_codes": profile.get("sic_codes", []),
-                "uncertainty": [],
-            }
-        ),
-    }
-    service = InMemorySessionService()
-    run_id = uuid.uuid4().hex
-    root = build_root_agent(approved_context=True)
-    runtime = Runner(agent=root, app_name=APP_NAME, session_service=service)
-    await service.create_session(
-        app_name=APP_NAME, user_id=USER_ID, session_id=run_id, state=initial_state
-    )
-    try:
-        response = None
-        msg = types.Content(role="user", parts=[types.Part(text=user_text)])
-        async for event in runtime.run_async(
-            user_id=USER_ID,
-            session_id=run_id,
-            new_message=msg,
-            run_config=RunConfig(max_llm_calls=30),
-        ):
-            if (
-                event.author == "UnderwritingSynthesizer"
-                and not _is_partial_event(event)
-                and event.is_final_response()
-            ):
-                response = _extract_text_from_event(event)
-        if not response:
-            raise RuntimeError("The report synthesizer did not produce a final response")
-        session = await service.get_session(app_name=APP_NAME, user_id=USER_ID, session_id=run_id)
-        validate_report(response, session.state)
-        return response
-    finally:
-        try:
-            await runtime.close()
-        finally:
-            await service.delete_session(app_name=APP_NAME, user_id=USER_ID, session_id=run_id)
+    return await generate_validated_report(approved, user_text, call_registry_tool)
 
 
 async def run_agent_turn_with_retries(approved: dict, user_text: str) -> str:

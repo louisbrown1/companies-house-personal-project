@@ -4,7 +4,9 @@ import json
 import re
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
+
+from .evidence_models import EvidenceGap, validate_fact
 
 
 class Source(BaseModel):
@@ -21,10 +23,23 @@ class EvidenceItem(BaseModel):
     structured_fact: dict
     confidence: float = Field(ge=0, le=1)
 
+    @model_validator(mode="after")
+    def validate_typed_fact(self):
+        if set(self.structured_fact) != {self.claim}:
+            raise ValueError("Evidence claim must identify its structured payload")
+        for claim, payload in self.structured_fact.items():
+            validate_fact(claim, payload)
+        return self
+
+    @property
+    def typed_fact(self):
+        return validate_fact(self.claim, self.structured_fact.get(self.claim))
+
 
 class EvidenceBundle(BaseModel):
     evidence: list[EvidenceItem]
     uncertainty: list[str]
+    gaps: list[EvidenceGap] = Field(default_factory=list)
 
 
 class ReportValidationError(ValueError):

@@ -167,6 +167,7 @@ def test_growth_requires_reconciled_comparative():
             "figures": {
                 "revenue": {
                     "value": str(revenue),
+                    "period": period,
                     "scale": 1000000,
                     "currency": "GBP",
                     "scope": "company",

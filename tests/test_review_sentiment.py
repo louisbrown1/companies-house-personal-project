@@ -169,3 +169,43 @@ def test_platform_summary_is_not_customer_testimony():
         "Customers frequently praise the helpful staff. 3.9 stars. We attract happy customers."
     )
     assert review.customer_passages("I was very impressed with my local store.")
+
+
+@pytest.mark.parametrize(
+    "status", ["aggregate_unavailable", "page_unavailable", "tavily_extraction_failed"]
+)
+def test_unavailable_rating_does_not_abort_report_or_publish_score(status):
+    search = {
+        "providers": [
+            {
+                "provider": "REVIEWS.io",
+                "status": "completed",
+                "results": [
+                    {
+                        "url": "https://www.reviews.io/company-reviews/store/example",
+                        "title": "Example reviews",
+                        "excerpt": "No verified customer feedback.",
+                        "sentiment": "insufficient",
+                        "supporting_quote": "",
+                        "analysis_status": "not_analysed",
+                        "aggregate": {
+                            "status": status,
+                            "url": "https://www.reviews.io/company-reviews/store/example",
+                            "checked_at": "2026-11-13T21:00:00Z",
+                            "reason": "Rating could not be verified.",
+                            "entity_match": "brand_name_only",
+                            "assessed_legal_name": "Example Limited",
+                        },
+                    }
+                ],
+            }
+        ]
+    }
+    bundle, groups = build_evidence(
+        {"company_number": "12345678", "profile": {"company_name": "Example"}}, None, {}
+    )
+    review.add_review_evidence(bundle, groups, search)
+    report = render_report(bundle, groups, [])
+    assert "Overall customer rating: unavailable. Rating could not be verified." in report
+    assert len(groups["reviews"][0]["rating_ids"]) == 1
+    assert "review_count" not in bundle.evidence[-2].structured_fact["platform_customer_rating"]

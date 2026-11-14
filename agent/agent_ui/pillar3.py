@@ -16,8 +16,10 @@ import httpx
 from .document_context import canonical_name
 from .pillar3_tables import km1_metrics
 from .reporting_dates import full_dates
+from .research_requests import post_json
 
 MAX_BYTES = 5_000_000
+MAX_PDF_BYTES = 25_000_000
 
 
 def publisher_matches(url, company_name):
@@ -60,10 +62,19 @@ async def fetch_public(client, url, host):
                 url = urljoin(url, response.headers["location"])
                 continue
             response.raise_for_status()
+            pdf = (
+                parsed.path.lower().endswith(".pdf")
+                or response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+                == "application/pdf"
+            )
+            limit = MAX_PDF_BYTES if pdf else MAX_BYTES
+            declared_size = response.headers.get("content-length", "")
+            if declared_size.isdigit() and int(declared_size) > limit:
+                raise ValueError("Disclosure exceeds size budget")
             data = bytearray()
             async for chunk in response.aiter_bytes():
                 data.extend(chunk)
-                if len(data) > MAX_BYTES:
+                if len(data) > limit:
                     raise ValueError("Disclosure exceeds size budget")
             return bytes(data), url
     raise ValueError("Too many disclosure redirects")
@@ -217,12 +228,28 @@ def publisher_identity(markup, company_name, company_number):
         plain,
         re.I,
     )
+    # Bind this common legal formulation directly to the named company; a
+    # nearby FCA/PRA number or another entity's registration is insufficient.
+    legal_name = re.escape(company_name).replace(r"\ ", r"\s+")
+    numbers.extend(
+        re.findall(
+            r"\b" + legal_name + r"\s+(?:is\s+)?(?:a\s+)?company\s+"
+            r"(?:registered|incorporated)\s+in\s+"
+            r"(?:England(?:\s+and\s+Wales)?|Wales|Scotland|Northern\s+Ireland)\s*"
+            r"(?:\(\s*)?(?:under\s+)?(?:company\s+)?(?:registration\s+)?"
+            r"(?:number|no\.?)\s*:?\s*([A-Z]{2}\d{6}|\d{6,8})\b",
+            plain,
+            re.I,
+        )
+    )
     return company_number.upper() in {n.upper().zfill(8) for n in numbers}
 
 
 async def collect_pillar3(company_name, company_number, period, known_sources=()):
+    from .browser_research import discover, enabled
+
     key = os.getenv("TAVILY_API_KEY", "")
-    if not key:
+    if not key and not enabled():
         return [], "Pillar 3 discovery unavailable: search provider not configured."
     failures = set()
     try:
@@ -240,8 +267,12 @@ async def collect_pillar3(company_name, company_number, period, known_sources=()
                 f'"{company_name}" "Pillar 3" "{period[:4]}"',
                 f'"{brand}" investor annual reports disclosures',
             ]:
+                if not key:
+                    failures.add("search_not_configured")
+                    break
                 try:
-                    response = await client.post(
+                    response = await post_json(
+                        client,
                         "https://api.tavily.com/search",
                         headers={"Authorization": f"Bearer {key}"},
                         json={
@@ -266,6 +297,26 @@ async def collect_pillar3(company_name, company_number, period, known_sources=()
                     )
                 except (httpx.HTTPError, ValueError):
                     failures.add("search_failed")
+            browser_pages = []
+            document_publishers = {}
+            if not candidates or failures:
+                recovered = await discover(
+                    company_name, company_number, "pillar3", period, seeds=candidates
+                )
+                browser_pages = recovered.pages
+                candidates.extend(p.url for p in browser_pages)
+                candidates.extend(u for u in recovered.links if publisher_matches(u, company_name))
+                verified_pages = {
+                    p.url
+                    for p in browser_pages
+                    if publisher_identity(p.text, company_name, company_number)
+                }
+                for document in recovered.documents:
+                    if document.get("publisher_page") in verified_pages:
+                        candidates.append(document["url"])
+                        document_publishers[document["url"]] = document["publisher_page"]
+                if recovered.status != "disabled":
+                    failures.add("browser_" + recovered.status)
             # Direct PDF results are retained, but their publisher must first be
             # identified on a same-host page containing the legal name and CRN.
             direct = [u for u in candidates if urlsplit(u).path.lower().endswith(".pdf")]
@@ -277,6 +328,9 @@ async def collect_pillar3(company_name, company_number, period, known_sources=()
             )
             queue.sort(key=lambda u: 0 if re.search(r"invest|report|disclos", u, re.I) else 1)
             verified_hosts = {}
+            for page in browser_pages:
+                if publisher_identity(page.text, company_name, company_number):
+                    verified_hosts[urlsplit(page.url).hostname] = page.url
             pdfs = list(dict.fromkeys(direct))
             visited = set()
             for _ in range(6):
@@ -331,7 +385,8 @@ async def collect_pillar3(company_name, company_number, period, known_sources=()
             for url in pdfs[:4]:
                 host = urlsplit(url).hostname
                 identity_url = (
-                    verified_hosts.get(host)
+                    document_publishers.get(url)
+                    or verified_hosts.get(host)
                     or verified_hosts.get(host.removeprefix("www."))
                     or verified_hosts.get("www." + host)
                 )

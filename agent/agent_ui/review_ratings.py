@@ -12,6 +12,7 @@ from urllib.parse import urljoin, urlsplit
 
 import httpx
 
+from .research_requests import post_json
 from .review_sentiment import name_matches, profile_identity, review_profile_url
 
 MAX_BYTES = 2 * 1024 * 1024
@@ -382,7 +383,8 @@ async def tavily_rating_fallback(search, company_name):
         )
     try:
         async with httpx.AsyncClient(timeout=45, follow_redirects=False) as client:
-            response = await client.post(
+            response = await post_json(
+                client,
                 "https://api.tavily.com/extract",
                 headers={"Authorization": f"Bearer {key}"},
                 json={
@@ -400,6 +402,11 @@ async def tavily_rating_fallback(search, company_name):
                 usage["status"] = "response_too_large"
                 return
             data = response.json()
+            checked = (
+                data.get("_research", {}).get("retrieved_at", checked)
+                if isinstance(data, dict)
+                else checked
+            )
             if (
                 not isinstance(data, dict)
                 or not isinstance(data.get("results"), list)

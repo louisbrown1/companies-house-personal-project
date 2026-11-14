@@ -34,11 +34,11 @@ def height(b):
 
 def title_kind(text):
     title = normalise(text)
-    if STATEMENT_TITLE.fullmatch(title):
+    if re.fullmatch(STATEMENT_TITLE.pattern.replace(" ", r"\s*"), title):
         return "statement"
-    if NOTES_TITLE.search(title):
+    if re.search(NOTES_TITLE.pattern.replace(" ", r"\s*"), title, re.I):
         return "notes"
-    if FINANCIAL_SECTION.fullmatch(title):
+    if re.fullmatch(FINANCIAL_SECTION.pattern.replace(" ", r"\s*"), title):
         return "financial_section"
     return None
 
@@ -181,7 +181,7 @@ def page_headings(boxes):
 
 def heading_matches(expected, actual):
     a, b = normalise(expected), normalise(actual)
-    if a == b:
+    if a.replace(" ", "") == b.replace(" ", ""):
         return True
 
     def scope(s):

@@ -3,7 +3,7 @@
 import json
 
 LOCAL_SCOPE = (
-    "Local Gemma test coverage is limited to selected Companies House profile fields "
+    "Registry highlight coverage is limited to selected Companies House profile fields "
     "and API collection counts. Individual officer, PSC, charge, insolvency-case and "
     "filing records were not supplied to the general highlight model. Accounts document extraction and web search coverage are reported "
     "separately. This is not a complete underwriting assessment."

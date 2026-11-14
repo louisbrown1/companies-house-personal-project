@@ -20,7 +20,7 @@ from .document_discovery import height, left, right, top
 from .reporting_dates import full_dates, standalone_date
 from .validation import parse_model_json
 
-VERSION = "table-interpretation-v7"
+VERSION = "table-interpretation-v9"
 MAX_TABLES = 8
 MAX_ROWS = 24
 AMOUNT = re.compile(r"^(?:-?\d+(?:,\d{3})*(?:\.\d+)?|\(\d+(?:,\d{3})*(?:\.\d+)?\)|[-–—])$")
@@ -215,7 +215,7 @@ def metric_compatible(metric, label):
         return {"total", "liabilities"} <= words and not words & {"current", "equity"}
     if metric == "total_equity":
         return (
-            {"total", "equity"} <= words or {"shareholders", "funds"} <= words
+            bool(re.search(r"\btotal equity\b|\bshareholders funds\b", s))
         ) and "liabilities" not in words
     if metric == "current_assets":
         return {"total", "current", "assets"} <= words and "non" not in words
@@ -244,13 +244,27 @@ def opinion_scope(document):
         match = re.search(
             r"we have audited (?:the )?financial statements of " + re.escape(expected) + r"\b", n
         )
+        opinion_first = False
+        audit_context = re.search(r"we have audited (?:the )?financial statements\b", n) or (
+            re.search(r"independent auditors? report", n)
+            and re.search(r"report on the audit of the financial statements", n)
+        )
+        if not match and audit_context:
+            match = re.search(
+                r"in our opinion " + re.escape(expected) + r"(?: ?s)? financial statements\b", n
+            )
+            opinion_first = bool(match)
         if not match:
             continue
         excerpt = n[match.start() :].split("basis for opinion")[0][:1200]
         subject = excerpt.replace(expected, "issuer")
+        if opinion_first and not (
+            re.search(r"company(?: ?s)? affairs", subject) and "true and fair view" in subject
+        ):
+            continue
         if re.search(r"\b(?:consolidated|subsidiaries|group|parent)\b", subject):
             continue
-        if not re.search(r"\bcompany\b", subject):
+        if not re.search(r"\bcompanys?\b", subject):
             continue
         found.append(
             {
@@ -274,9 +288,13 @@ def prepare_context(path, document):
     starts = [
         e["printed_page"] + offset
         for e in entries
-        if re.search(r"independent auditor|auditor.?s report", e["title"], re.I)
+        if re.search(r"independent\s*auditor|auditor.?s\s*report", e["title"], re.I)
     ]
-    wanted = sorted({p for s in starts[:1] for p in (s, s + 1) if 1 <= p <= document["page_count"]})
+    # Contents OCR and printed/PDF offsets can be a page or two out. Retrieve
+    # a small neighbourhood; only a named, issuer-only opinion establishes scope.
+    wanted = sorted(
+        {p for s in starts[:1] for p in range(s - 2, s + 3) if 1 <= p <= document["page_count"]}
+    )
     if not wanted:
         return document
     from .document_navigation import read_pages
@@ -295,11 +313,21 @@ def unit_scale(text):
     s = text.lower().replace(" ", "").replace("’", "'")
     if re.fullmatch(r"(?:£|gbp)(?:'?(?:000|000s)|thousands?)", s):
         return 1000
-    if re.fullmatch(r"(?:£|gbp)(?:m|million|millions)", s):
+    if re.fullmatch(r"(?:£|gbp)(?:'?m|million|millions)", s):
         return 1000000
     if s in ("£", "gbp"):
         return 1
     return None
+
+
+def fiscal_header_years(text, periods, dates):
+    match = re.fullmatch(r"FY\s*['’]?(\d{2}|20\d{2})", text.strip(), re.I)
+    if not match:
+        return set()
+    eligible = {
+        p[:4] for p in periods if p[:4].endswith(match[1]) and any(d[5:] == p[5:] for d in dates)
+    }
+    return eligible if len(eligible) == 1 else set()
 
 
 def header_dates(boxes):
@@ -357,7 +385,11 @@ def build_tables(document, periods):
                 end = top(other)
                 break
         block = [b for b in boxes if top(title) - 10 <= top(b) < end]
-        if not any(unit_scale(b["text"]) for b in block if top(b) < top(title) + 350):
+        if not any(
+            unit_scale(b["text"]) and b.get("score", 1) >= 0.90
+            for b in block
+            if top(b) < top(title) + 350
+        ):
             for i, b in enumerate(standard.get(page["page"], [])):
                 if top(title) < top(b) < min(end, top(title) + 350) and unit_scale(b["text"]):
                     block.append(
@@ -375,7 +407,7 @@ def build_tables(document, periods):
                 continue
             values = [b for b in row["cells"] if numeric(b)]
             labels = [b for b in row["cells"] if re.search(r"[A-Za-z]{3}", b["text"])]
-            if not labels or len(values) < 2:
+            if not labels or not values:
                 previous = (row["y"], labels) if labels and not values else None
                 continue
             first = min(left(b) for b in values)
@@ -483,6 +515,9 @@ def build_tables(document, periods):
                 for d in [standalone_date(b["text"])]
                 if d
             )
+            for b in near:
+                if b.get("score", 1) >= 0.90:
+                    years.update(fiscal_header_years(b["text"], periods, dates))
             allowed = [
                 p
                 for p in periods
